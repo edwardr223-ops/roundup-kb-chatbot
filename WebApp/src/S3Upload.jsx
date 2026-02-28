@@ -5,7 +5,7 @@ import FileUpload from "@cloudscape-design/components/file-upload";
 import FormField from "@cloudscape-design/components/form-field";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { bedrockConfig, vpceEndpoints } from './aws-config';
+import { bedrockConfig, config, vpceEndpoints } from './aws-config';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { CredentialsContext } from './SessionContext';
 import { sanitizeForLog } from './utils/sanitize';
@@ -16,7 +16,9 @@ export default () => {
   const [loading, setLoading] = useState(false);
 
   const uploadFilesToS3 = async (values) => {
-    console.log('Starting upload process with', values.length, 'files');
+    if (config.debug) {
+      console.log('Starting upload process with', values.length, 'files');
+    }
 
     // Construct S3 endpoint with "bucket." prefix for VPC endpoint
     const getS3Endpoint = () => {
@@ -38,7 +40,9 @@ export default () => {
     setLoading(true);
     try {
       await Promise.all(values.map(async (item) => {
-        console.log('Processing file:', sanitizeForLog(item.name));
+        if (config.debug) {
+          console.log('Processing file:', sanitizeForLog(item.name));
+        }
         
         // Convert file to array buffer
         let fileContent;
@@ -54,7 +58,9 @@ export default () => {
             });
           }
         } catch (fileError) {
-          console.error('Error reading file:', sanitizeForLog(fileError.message));
+          if (config.debug) {
+            console.error('Error reading file:', sanitizeForLog(fileError.message));
+          }
           throw new Error(`Failed to read file ${sanitizeForLog(item.name)}: ${sanitizeForLog(fileError.message)}`);
         }
 
@@ -65,25 +71,35 @@ export default () => {
           ContentType: item.type || 'application/octet-stream'
         };
 
-        console.log('Uploading file:', sanitizeForLog(item.name), 'Size:', fileContent.byteLength);
+        if (config.debug) {
+          console.log('Uploading file:', sanitizeForLog(item.name), 'Size:', fileContent.byteLength);
+        }
 
         const command = new PutObjectCommand(input);
         const result = await client.send(command);
         
-        console.log('Upload successful for file:', sanitizeForLog(item.name));
+        if (config.debug) {
+          console.log('Upload successful for file:', sanitizeForLog(item.name));
+        }
       }));
 
-      console.log('All files uploaded successfully');
+      if (config.debug) {
+        console.log('All files uploaded successfully');
+      }
       setValue([]);
     } catch (error) {
-      console.error('Upload error:', sanitizeForLog(error.message));
+      if (config.debug) {
+        console.error('Upload error:', sanitizeForLog(error.message));
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleFileChange = ({ detail }) => {
-    console.log('File selection changed, count:', detail.value.length);
+    if (config.debug) {
+      console.log('File selection changed, count:', detail.value.length);
+    }
     setValue(detail.value);
   };
 
