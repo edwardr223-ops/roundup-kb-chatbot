@@ -137,7 +137,7 @@ cd Infrastructure
 ./deploy.sh --stack-name my-br-bot --email-domain example.com --api-gateway-endpoint-type PRIVATE
 ```
 
-The script reads `vpc-config.json` automatically and passes the VPCE URLs to the relevant CloudFormation stacks. The VPC ID is read from the config file, or can be overridden with `--vpc-id`.
+The script reads `vpc-config.json` automatically and passes the VPCE DNS URLs (from step 3 above) to the relevant CloudFormation stacks. The VPC ID is read from the config file, or can be overridden with `--vpc-id`.
 
 ### API Gateway Resource Policy (PRIVATE Endpoints)
 
