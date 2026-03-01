@@ -129,7 +129,7 @@ For environments that require private connectivity (no internet access), the sol
 cp Infrastructure/vpc-config.json.sample Infrastructure/vpc-config.json
 ```
 
-3. **Edit `vpc-config.json`** and populate it with your VPC ID and VPCE DNS names. Note: for S3 interface endpoints, use the base DNS name without the `*.` wildcard prefix.
+3. **Edit `vpc-config.json`** and populate it with your VPC ID and VPCE DNS names (not the VPCE IDs). Note: for S3 interface endpoints, use the base DNS name without the `*.` wildcard prefix.
 
 4. **Deploy with private API Gateway:**
 ```bash
