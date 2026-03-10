@@ -5,8 +5,18 @@ Description: Bedrock Stack - Bedrock Agent, Knowledge Base, and OpenSearch Serve
 
 Conditions:
   HasGuardrailId: !Not [!Equals [!Ref GuardrailId, '']]
+  CreateRAGResources: !Equals [!Ref SkipRag, "false"]
+  SkipRAGResources: !Not [!Equals [!Ref SkipRag, "false"]]
 
 Parameters:
+  SkipRag:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: "Skip RAG resources (OpenSearch, KB, DataSource, IndexCreator)"
+
   # Foundation Stack Outputs
   DynamoDBKMSKeyId:
     Type: String
@@ -118,6 +128,7 @@ Resources:
 
   LambdaServiceRole:
     Type: AWS::IAM::Role
+    Condition: CreateRAGResources
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -131,6 +142,7 @@ Resources:
 
   LambdaServiceRolePolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: CreateRAGResources
     Properties:
       ManagedPolicyName: !Sub 'LambdaServiceRolePolicy-${AWS::StackName}'
       Description: 'Managed policy for Lambda service role with S3 and CloudWatch Logs access'
@@ -165,6 +177,7 @@ Resources:
 
   BedrockKnowledgeBaseRole:
     Type: AWS::IAM::Role
+    Condition: CreateRAGResources
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -178,6 +191,7 @@ Resources:
 
   BedrockKnowledgeBaseRolePolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: CreateRAGResources
     Properties:
       ManagedPolicyName: !Sub 'BedrockKnowledgeBaseRolePolicy-${AWS::StackName}'
       Description: 'Managed policy for Bedrock Knowledge Base role with S3 and Bedrock access'
@@ -216,6 +230,7 @@ Resources:
 
   OSSSecPolicyNetwork:
     Type: AWS::OpenSearchServerless::SecurityPolicy
+    Condition: CreateRAGResources
     Properties:
       Policy: 
         !Sub |
@@ -226,6 +241,7 @@ Resources:
 
   OSSSecPolicyEncryption:
     Type: AWS::OpenSearchServerless::SecurityPolicy
+    Condition: CreateRAGResources
     Properties:
       Policy: 
         !Sub |
@@ -236,6 +252,7 @@ Resources:
 
   OSSAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
+    Condition: CreateRAGResources
     Properties:
       Policy: 
         !Sub |
@@ -271,6 +288,7 @@ Resources:
 
   OSSCollection:
     Type: AWS::OpenSearchServerless::Collection
+    Condition: CreateRAGResources
     DependsOn:
       - OSSSecPolicyEncryption
       - OSSSecPolicyNetwork
@@ -283,6 +301,7 @@ Resources:
 
   OSSCollectionLambdaAccess:
     Type: AWS::IAM::Policy
+    Condition: CreateRAGResources
     DependsOn: OSSCollection
     Properties:
       PolicyName: OSSCollectionAccess
@@ -299,6 +318,7 @@ Resources:
 
   BedrockKnowledgeBaseOSSAccess:
     Type: AWS::IAM::Policy
+    Condition: CreateRAGResources
     DependsOn: OSSCollection
     Properties:
       PolicyName: BedrockKnowledgeBaseOSSAccess
@@ -315,6 +335,7 @@ Resources:
 
   DependencyLayer:
     Type: AWS::Lambda::LayerVersion
+    Condition: CreateRAGResources
     Properties:
       CompatibleRuntimes:
         - python3.13
@@ -325,6 +346,7 @@ Resources:
 
   IndexCreatorFunction:
     Type: AWS::Lambda::Function
+    Condition: CreateRAGResources
     DependsOn: LambdaServiceRole
     Properties:
       FunctionName: !Sub IndexCreatorFunction-${AWS::StackName}
@@ -458,6 +480,7 @@ Resources:
            
   IndexCreator:
     Type: Custom::IndexCreator
+    Condition: CreateRAGResources
     DependsOn:
       - OSSCollection
       - OSSCollectionLambdaAccess
@@ -469,6 +492,7 @@ Resources:
 
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
+    Condition: CreateRAGResources
     DependsOn:
       - OSSCollection
       - IndexCreator
@@ -493,6 +517,7 @@ Resources:
 
   BedrockKnowledgeBaseSpecificAccess:
     Type: AWS::IAM::Policy
+    Condition: CreateRAGResources
     DependsOn:
       - OSSCollection
       - BedrockKnowledgeBase
@@ -528,6 +553,7 @@ Resources:
 
   BedrockDataSource:
     Type: AWS::Bedrock::DataSource
+    Condition: CreateRAGResources
     DependsOn: 
       - BedrockKnowledgeBase
       - BedrockKnowledgeBaseSpecificAccess
@@ -561,12 +587,15 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: BedrockKnowledgeBaseRetrieve
-            Effect: Allow
-            Action:
-              - bedrock:Retrieve
-              - bedrock:RetrieveAndGenerate
-            Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKnowledgeBase}'
+          - !If
+            - CreateRAGResources
+            - Sid: BedrockKnowledgeBaseRetrieve
+              Effect: Allow
+              Action:
+                - bedrock:Retrieve
+                - bedrock:RetrieveAndGenerate
+              Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKnowledgeBase}'
+            - !Ref AWS::NoValue
           - Sid: S3PersonaBucketAccess
             Effect: Allow
             Action:
@@ -653,8 +682,6 @@ Resources:
   BedrockAgent:
     Type: AWS::Bedrock::Agent
     DependsOn: 
-      - BedrockKnowledgeBase
-      - BedrockKnowledgeBaseSpecificAccess  # Wait for KB permissions
       - BedrockAgentRole  # Wait for agent role
       - BedrockAgentResourceRole  # Wait for agent resource role
     Properties:
@@ -669,10 +696,12 @@ Resources:
         - GuardrailIdentifier: !Ref GuardrailId
           GuardrailVersion: !Ref GuardrailVersion
         - !Ref AWS::NoValue
-      KnowledgeBases:
-        - KnowledgeBaseId: !Ref BedrockKnowledgeBase
-          Description: "Use this knowledge base to answer questions about our documentation and internal processes."
-          KnowledgeBaseState: ENABLED
+      KnowledgeBases: !If
+        - CreateRAGResources
+        - - KnowledgeBaseId: !Ref BedrockKnowledgeBase
+            Description: "Use this knowledge base to answer questions about our documentation and internal processes."
+            KnowledgeBaseState: ENABLED
+        - !Ref AWS::NoValue
       FoundationModel: !Ref AgentFoundationModel
       PromptOverrideConfiguration:
           PromptConfigurations:
@@ -692,12 +721,14 @@ Resources:
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
-            # Knowledge Base specific permissions
-            - Effect: Allow
-              Action:
-                - bedrock:Retrieve
-                - bedrock:RetrieveAndGenerate
-              Resource: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKnowledgeBase}
+            - !If
+              - CreateRAGResources
+              - Effect: Allow
+                Action:
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
+                Resource: !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKnowledgeBase}
+              - !Ref AWS::NoValue
             # Agent specific permissions
             - Effect: Allow
               Action:
@@ -730,6 +761,7 @@ Outputs:
     Description: Name of the dynamically created S3 bucket for persona documents
     Value: !Ref PersonaS3BucketName
   KnowledgeBaseRoleArn:
+    Condition: CreateRAGResources
     Description: The ARN of the created Bedrock knowledge base role
     Value: !GetAtt BedrockKnowledgeBaseRole.Arn
   AgentId:
@@ -743,19 +775,23 @@ Outputs:
     Value: !GetAtt BedrockAgentResourceRole.Arn
   BedrockKnowledgeBaseId:
     Description: ID of the Bedrock Knowledge Base
-    Value: !Ref BedrockKnowledgeBase
+    Value: !If [CreateRAGResources, !Ref BedrockKnowledgeBase, "NONE"]
   BedrockDataSourceId:
     Description: ID of the Bedrock Data Source
-    Value: !GetAtt BedrockDataSource.DataSourceId
+    Value: !If [CreateRAGResources, !GetAtt BedrockDataSource.DataSourceId, "NONE"]
   LambdaFunctionName:
+    Condition: CreateRAGResources
     Description: Name of the Index Creator Lambda function
     Value: !Ref IndexCreatorFunction
   LambdaRoleArn:
+    Condition: CreateRAGResources
     Description: ARN of the Lambda service role
     Value: !GetAtt LambdaServiceRole.Arn
   LambdaRoleName:
+    Condition: CreateRAGResources
     Description: Name of the Lambda service role
     Value: !Ref LambdaServiceRole
   LambdaPolicyArn:
+    Condition: CreateRAGResources
     Description: ARN of the custom Lambda policy
     Value: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaServiceRole}/LambdaS3AndAOSSAccess"

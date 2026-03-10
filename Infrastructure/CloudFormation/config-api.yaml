@@ -107,6 +107,15 @@ Parameters:
     Type: String
     Description: DynamoDB table name for User Personas
 
+  # RAG Feature Flag
+  RagEnabled:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: "Whether RAG (Knowledge Base) is enabled for this deployment"
+
   # VPCE Parameters (7)
   VpceDynamodb:
     Type: String
@@ -265,6 +274,13 @@ Resources:
       Name: !Sub /${AWS::StackName}/bedrock/defaultPrompt
       Type: String
       Value: !Ref BedrockDefaultPrompt
+
+  SSMBedrockRagEnabled:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${AWS::StackName}/bedrock/ragEnabled
+      Type: String
+      Value: !Ref RagEnabled
 
   # ============================================================
   # SSM Parameters - DynamoDB Configuration (2)
@@ -503,7 +519,8 @@ Resources:
                           "defaultModelStream": _val(params, "bedrock/defaultModelStream"),
                           "guardrailId": _val(params, "bedrock/guardrailId"),
                           "guardrailVersion": _val(params, "bedrock/guardrailVersion"),
-                          "defaultPrompt": _val(params, "bedrock/defaultPrompt")
+                          "defaultPrompt": _val(params, "bedrock/defaultPrompt"),
+                          "ragEnabled": _val(params, "bedrock/ragEnabled")
                       },
                       "dynamoConfig": {
                           "region": region,
@@ -553,8 +570,8 @@ Resources:
       LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}"
       RetentionInDays: 90
       KmsKeyId: !Ref CloudWatchLogsKMSKeyArn
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
 
   # ============================================================
   # API Gateway REST API

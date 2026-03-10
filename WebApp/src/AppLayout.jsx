@@ -1,6 +1,6 @@
 // Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { signOut, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { CredentialsContext } from './SessionContext';
 import "@cloudscape-design/global-styles/index.css"
@@ -39,6 +39,7 @@ import pricingData from './bedrock_pricing.json';
 applyMode(Mode.Dark);
 
 function Layout() {
+  const ragEnabled = bedrockConfig.ragEnabled !== "false";
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [logo, setLogo] = useState(AWS_Logo);
@@ -64,6 +65,18 @@ function Layout() {
 
   const chatUIRef = useRef(null);
   const appLayoutRef = useRef(null);
+
+  // Filter out RAG chat type when RAG is disabled
+  const filteredChatTypes = useMemo(() => {
+    return ragEnabled ? chatTypes : chatTypes.filter(t => t.id !== 'RAG');
+  }, [chatTypes, ragEnabled]);
+
+  // Reset chatType to LLM if RAG is disabled and current chatType is RAG
+  useEffect(() => {
+    if (!ragEnabled && chatType === 'RAG') {
+      setChatType('LLM');
+    }
+  }, [ragEnabled, chatType]);
 
   // Handle persona changes from PersonaManager
   const handlePersonaChange = () => {
@@ -436,13 +449,19 @@ function Layout() {
                 }
               }}
               items={[
-                { 
+                ...(ragEnabled ? [{ 
                   type: 'section', 
                   text: 'Knowledge Base Updates', 
                   items: [
                     { type: 'link', text: `Upload documents to S3`, href: `upload` },
                     { type: 'link', text: `Add website to crawl`, href: `crawl` },
                     { type: 'link', text: `Sync Bedrock Knowledge Base`, href: `sync` },
+                  ]
+                }] : []),
+                { 
+                  type: 'section', 
+                  text: 'Agent Configuration', 
+                  items: [
                     { type: 'link', text: `Update Bedrock Agent Instructions`, href: `instructions` }
                   ]
                 },
@@ -635,7 +654,7 @@ function Layout() {
                     ref={chatUIRef}
                     chatType={chatType}
                     setChatType={setChatType}
-                    chatTypes={chatTypes}
+                    chatTypes={filteredChatTypes}
                     modelId={modelId}
                     setModelId={setModelId}
                     topNavModels={topNavModels}

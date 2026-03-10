@@ -306,13 +306,58 @@ else
         CF_LOGS_BUCKET="${STACK_NAME}-cloudfront-cloudfront-logs-${UNIQUE_SUFFIX}"
     fi
 
-    delete_stack "$STACK_NAME-cloudfront"
+    # Attempt to delete the CloudFront stack. If it fails (e.g., S3BucketPolicy
+    # cannot be deleted because it's the last policy on a bucket owned by another
+    # stack), retry with --retain-resources to skip the problematic resource.
+    if ! delete_stack "$STACK_NAME-cloudfront"; then
+        echo ""
+        echo "CloudFront stack deletion failed. Checking for resources that can be retained..."
+        FAILED_RESOURCES=$(aws cloudformation describe-stack-resources \
+            --stack-name "$STACK_NAME-cloudfront" \
+            --query "StackResources[?ResourceStatus=='DELETE_FAILED'].LogicalResourceId" \
+            --output text 2>/dev/null || echo "")
+
+        if [ -n "$FAILED_RESOURCES" ]; then
+            echo "Retrying deletion, retaining failed resources: $FAILED_RESOURCES"
+            aws cloudformation delete-stack \
+                --stack-name "$STACK_NAME-cloudfront" \
+                --retain-resources $FAILED_RESOURCES
+
+            echo "Waiting for stack deletion: $STACK_NAME-cloudfront"
+            if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME-cloudfront"; then
+                echo "Successfully deleted CloudFront stack (retained: $FAILED_RESOURCES)"
+            else
+                echo "Warning: CloudFront stack deletion still failed. Check the console."
+            fi
+        fi
+    fi
 
     echo ""
     echo "=========================================="
     echo "Step 1b: Deleting WAF WebACL stack (us-east-1)"
     echo "=========================================="
-    delete_stack "$STACK_NAME-cloudfront-waf" "us-east-1"
+    # CloudFront distributions can take several minutes to fully disassociate
+    # from the WebACL after the CloudFront stack is deleted. Retry if needed.
+    WAF_RETRIES=6
+    WAF_RETRY=0
+    while [ $WAF_RETRY -lt $WAF_RETRIES ]; do
+        if delete_stack "$STACK_NAME-cloudfront-waf" "us-east-1"; then
+            break
+        fi
+        WAF_RETRY=$((WAF_RETRY + 1))
+        if [ $WAF_RETRY -lt $WAF_RETRIES ]; then
+            WAIT_SECS=$((60 * WAF_RETRY))
+            if [ $WAIT_SECS -gt 180 ]; then
+                WAIT_SECS=180
+            fi
+            echo "WAF stack deletion failed (CloudFront may still be disassociating). Retrying in ${WAIT_SECS}s... (attempt $((WAF_RETRY + 1))/$WAF_RETRIES)"
+            sleep $WAIT_SECS
+        else
+            echo "Warning: WAF stack deletion failed after $WAF_RETRIES attempts."
+            echo "The CloudFront distribution may still be disassociating from the WebACL."
+            echo "Wait a few minutes and run: aws cloudformation delete-stack --stack-name $STACK_NAME-cloudfront-waf --region us-east-1"
+        fi
+    done
 fi
 echo ""
 
@@ -360,14 +405,16 @@ echo "Step 6: Emptying S3 buckets before Foundation stack deletion"
 echo "=========================================="
 
 # All buckets created by the foundation stack (all have versioning enabled)
+# S3AccessLogsBucket is emptied LAST because other buckets write access logs to it,
+# so new objects can appear while we're emptying the other buckets.
 FOUNDATION_BUCKETS=(
-    "${STACK_NAME}-foundation-s3-access-logs-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-lambda-layer-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-react-code-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-cfn-templates-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-persona-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-kb-docs-${UNIQUE_SUFFIX}"
     "${STACK_NAME}-foundation-ui-code-${UNIQUE_SUFFIX}"
+    "${STACK_NAME}-foundation-s3-access-logs-${UNIQUE_SUFFIX}"
 )
 
 for bucket in "${FOUNDATION_BUCKETS[@]}"; do
@@ -378,7 +425,32 @@ echo ""
 echo "=========================================="
 echo "Step 7: Deleting Foundation stack"
 echo "=========================================="
-delete_stack "$STACK_NAME-foundation"
+
+ACCESS_LOGS_BUCKET="${STACK_NAME}-foundation-s3-access-logs-${UNIQUE_SUFFIX}"
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    # Re-empty the access logs bucket right before each attempt
+    # S3 access logging can write new objects between emptying and stack deletion
+    if [ $RETRY_COUNT -gt 0 ]; then
+        echo "Retry $RETRY_COUNT: Re-emptying access logs bucket before retrying..."
+        empty_s3_bucket "$ACCESS_LOGS_BUCKET"
+    fi
+
+    if delete_stack "$STACK_NAME-foundation"; then
+        break
+    fi
+
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+        echo "Foundation stack deletion failed (likely S3AccessLogsBucket not empty). Retrying..."
+        sleep 5
+    else
+        echo "Error: Foundation stack deletion failed after $MAX_RETRIES attempts."
+        echo "You may need to manually empty and delete the bucket: $ACCESS_LOGS_BUCKET"
+    fi
+done
 echo ""
 
 # ==========================================
@@ -407,10 +479,37 @@ fi
 echo ""
 
 # ==========================================
-# Step 9: Clean up local artifacts
+# Step 9: Clean up auto-created CloudWatch log groups
 # ==========================================
 echo "=========================================="
-echo "Step 9: Cleaning up local artifacts"
+echo "Step 9: Cleaning up auto-created CloudWatch log groups"
+echo "=========================================="
+
+# Lambda and CodeBuild auto-create log groups on first invocation.
+# These are not managed by CloudFormation, so we delete them here.
+echo "Searching for log groups matching: /aws/*/\${STACK_NAME}-*"
+AUTO_LOG_GROUPS=$(aws logs describe-log-groups \
+    --log-group-name-prefix "/aws/" \
+    --query "logGroups[?contains(logGroupName, '${STACK_NAME}-')].logGroupName" \
+    --output text 2>/dev/null || echo "")
+
+if [ -n "$AUTO_LOG_GROUPS" ]; then
+    for lg in $AUTO_LOG_GROUPS; do
+        echo "  Deleting log group: $lg"
+        aws logs delete-log-group --log-group-name "$lg" 2>/dev/null || \
+            echo "  Warning: Could not delete log group: $lg"
+    done
+    echo "Auto-created log groups cleanup complete"
+else
+    echo "No auto-created log groups found"
+fi
+echo ""
+
+# ==========================================
+# Step 10: Clean up local artifacts
+# ==========================================
+echo "=========================================="
+echo "Step 10: Cleaning up local artifacts"
 echo "=========================================="
 
 if [ -f "reactapplication.zip" ]; then

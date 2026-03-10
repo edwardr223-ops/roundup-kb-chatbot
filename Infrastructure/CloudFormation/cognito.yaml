@@ -2,6 +2,14 @@
 # SPDX-License-Identifier: MIT-0
 AWSTemplateFormatVersion: 2010-09-09
 Parameters:
+  SkipRag:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: "Skip RAG resources - excludes KB permissions from authenticated user role"
+
   # Foundation Stack Outputs
   DynamoDBKMSKeyId:
     Type: String
@@ -46,6 +54,9 @@ Parameters:
   KnowledgeBaseS3Bucket:
     Type: String
     Description: S3 bucket name for knowledge base documents
+
+Conditions:
+  HasKnowledgeBase: !Equals [!Ref SkipRag, "false"]
 
 Resources:
   PreSignUpRole:
@@ -156,7 +167,20 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-          - Sid: S3BucketAccess
+          - !If
+            - HasKnowledgeBase
+            - Sid: S3KnowledgeBaseBucketAccess
+              Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+                - s3:ListBucket
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:s3:::${KnowledgeBaseS3Bucket}'
+                - !Sub 'arn:${AWS::Partition}:s3:::${KnowledgeBaseS3Bucket}/*'
+            - !Ref AWS::NoValue
+          - Sid: S3PersonaBucketAccess
             Effect: Allow
             Action:
               - s3:PutObject
@@ -164,8 +188,6 @@ Resources:
               - s3:DeleteObject
               - s3:ListBucket
             Resource:
-              - !Sub 'arn:${AWS::Partition}:s3:::${KnowledgeBaseS3Bucket}'
-              - !Sub 'arn:${AWS::Partition}:s3:::${KnowledgeBaseS3Bucket}/*'
               - !Sub 'arn:${AWS::Partition}:s3:::${PersonaS3Bucket}'
               - !Sub 'arn:${AWS::Partition}:s3:::${PersonaS3Bucket}/*'
           - Sid: KMSKeyAccess
@@ -186,12 +208,15 @@ Resources:
               - bedrock:CreateAgentAlias
             Resource:
               - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:agent-alias/${BedrockAgentId}/*'
-          - Sid: BedrockKnowledgeBaseRetrieve
-            Effect: Allow
-            Action:
-              - bedrock:Retrieve
-            Resource:
-              - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*'
+          - !If
+            - HasKnowledgeBase
+            - Sid: BedrockKnowledgeBaseRetrieve
+              Effect: Allow
+              Action:
+                - bedrock:Retrieve
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*'
+            - !Ref AWS::NoValue
           - Sid: BedrockModelInvoke
             Effect: Allow
             Action:
@@ -207,24 +232,30 @@ Resources:
               - bedrock:InvokeModelWithResponseStream
             Resource:
               - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
-          - Sid: BedrockKnowledgeBaseOperations
-            Effect: Allow
-            Action:
-              - bedrock:CreateDataSource
-              - bedrock:StartIngestionJob
-              - bedrock:GetIngestionJob
-              - bedrock:ListIngestionJobs
-              - bedrock:RetrieveAndGenerate
-              - bedrock:UpdateDataSource
-            Resource:
-              - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}'
-          - Sid: BedrockDataSourceOperations
-            Effect: Allow
-            Action:
-              - bedrock:CreateDataSource
-              - bedrock:UpdateDataSource
-            Resource:
-              - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}/data-source/*'
+          - !If
+            - HasKnowledgeBase
+            - Sid: BedrockKnowledgeBaseOperations
+              Effect: Allow
+              Action:
+                - bedrock:CreateDataSource
+                - bedrock:StartIngestionJob
+                - bedrock:GetIngestionJob
+                - bedrock:ListIngestionJobs
+                - bedrock:RetrieveAndGenerate
+                - bedrock:UpdateDataSource
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}'
+            - !Ref AWS::NoValue
+          - !If
+            - HasKnowledgeBase
+            - Sid: BedrockDataSourceOperations
+              Effect: Allow
+              Action:
+                - bedrock:CreateDataSource
+                - bedrock:UpdateDataSource
+              Resource:
+                - !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}/data-source/*'
+            - !Ref AWS::NoValue
           - Sid: BedrockListOperations
             Effect: Allow
             Action:
