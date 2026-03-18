@@ -14,7 +14,7 @@ This is a sample Amazon Bedrock powered serverless chatbot that's deployed throu
   - [🚀 Deployment](#-deployment)
   - [🔒 Deploying in an Isolated VPC with VPC Endpoints](#-deploying-in-an-isolated-vpc-with-vpc-endpoints)
     - [API Gateway Resource Policy (PRIVATE Endpoints)](#api-gateway-resource-policy-private-endpoints)
-  - [🚫 Skipping RAG Infrastructure (PRIVATE Deployments)](#-skipping-rag-infrastructure-private-deployments)
+  - [🚫 Skipping RAG Infrastructure](#-skipping-rag-infrastructure)
   - [⚙️ Runtime Configuration (Config API)](#️-runtime-configuration-config-api)
   - [🔄 Redeploying the Web App](#-redeploying-the-web-app)
   - [🗑️ Tearing Down the Deployment](#️-tearing-down-the-deployment)
