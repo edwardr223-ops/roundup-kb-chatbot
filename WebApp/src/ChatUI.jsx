@@ -716,6 +716,8 @@ const ChatUI = React.forwardRef(({
   const chatContainerRef = useRef(null);
   const credentials = useContext(CredentialsContext);
 
+  const ragEnabled = bedrockConfig.ragEnabled !== "false";
+
   // Transform model and chat type options to Select component format
   const modelOptions = useMemo(() => {
     return topNavModels.map(model => ({
@@ -725,11 +727,12 @@ const ChatUI = React.forwardRef(({
   }, [topNavModels]);
 
   const chatTypeOptions = useMemo(() => {
-    return chatTypes.map(type => ({
+    const filteredChatTypes = ragEnabled ? chatTypes : chatTypes.filter(t => t.id !== 'RAG');
+    return filteredChatTypes.map(type => ({
       label: type.text,
       value: type.id
     }));
-  }, [chatTypes]);
+  }, [chatTypes, ragEnabled]);
 
   // Handle window resize to detect mobile devices
   useEffect(() => {
@@ -740,6 +743,13 @@ const ChatUI = React.forwardRef(({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Force chatType to LLM when RAG is disabled
+  useEffect(() => {
+    if (!ragEnabled && chatType === 'RAG') {
+      setChatType('LLM');
+    }
+  }, [ragEnabled, chatType, setChatType]);
 
   const getModelItem = (foundationModels, modelId, item) => {
     if (config.debug) console.log('Model ID:', sanitizeForLog(modelId));
@@ -1517,7 +1527,7 @@ const ChatUI = React.forwardRef(({
             >
               Chat UI
             </Header>
-            {chatType === 'RAG' && <KbStatusBanner />}
+            {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
             <div className="chat-ui-scroll-container" ref={chatContainerRef}>
               <div className="chat-container">
                 <div className="chat-messages-wrapper">

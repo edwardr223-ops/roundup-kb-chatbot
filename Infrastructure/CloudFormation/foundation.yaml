@@ -15,6 +15,16 @@ Parameters:
     Description: 'Deterministic hash suffix for S3 bucket names (avoids exposing AWS account ID)'
     AllowedPattern: '[a-f0-9]{8}'
     ConstraintDescription: 'Must be an 8-character lowercase hex string'
+  SkipRag:
+    Type: String
+    Description: 'Skip RAG resources (Knowledge Base S3 bucket)'
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+Conditions:
+  CreateKBBucket: !Equals [!Ref SkipRag, 'false']
 
 Resources:
   # ============================================================================
@@ -502,6 +512,7 @@ Resources:
   
   KnowledgeBaseS3Bucket:
     Type: AWS::S3::Bucket
+    Condition: CreateKBBucket
     Properties:
       BucketName: !Sub '${AWS::StackName}-kb-docs-${UniqueSuffix}'
       BucketEncryption:
@@ -543,6 +554,7 @@ Resources:
 
   KnowledgeBaseS3BucketPolicy:
     Type: AWS::S3::BucketPolicy
+    Condition: CreateKBBucket
     Properties:
       Bucket: !Ref KnowledgeBaseS3Bucket
       PolicyDocument:
@@ -759,13 +771,13 @@ Outputs:
 
   KnowledgeBaseS3Bucket:
     Description: 'S3 bucket name for knowledge base documents'
-    Value: !Ref KnowledgeBaseS3Bucket
+    Value: !If [CreateKBBucket, !Ref KnowledgeBaseS3Bucket, 'NONE']
     Export:
       Name: !Sub '${AWS::StackName}-KnowledgeBaseS3Bucket'
 
   KnowledgeBaseS3BucketArn:
     Description: 'S3 bucket ARN for knowledge base documents'
-    Value: !GetAtt KnowledgeBaseS3Bucket.Arn
+    Value: !If [CreateKBBucket, !GetAtt KnowledgeBaseS3Bucket.Arn, 'NONE']
     Export:
       Name: !Sub '${AWS::StackName}-KnowledgeBaseS3BucketArn'
 

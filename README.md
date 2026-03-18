@@ -14,6 +14,7 @@ This is a sample Amazon Bedrock powered serverless chatbot that's deployed throu
   - [🚀 Deployment](#-deployment)
   - [🔒 Deploying in an Isolated VPC with VPC Endpoints](#-deploying-in-an-isolated-vpc-with-vpc-endpoints)
     - [API Gateway Resource Policy (PRIVATE Endpoints)](#api-gateway-resource-policy-private-endpoints)
+  - [🚫 Skipping RAG Infrastructure (PRIVATE Deployments)](#-skipping-rag-infrastructure-private-deployments)
   - [⚙️ Runtime Configuration (Config API)](#️-runtime-configuration-config-api)
   - [🔄 Redeploying the Web App](#-redeploying-the-web-app)
   - [🗑️ Tearing Down the Deployment](#️-tearing-down-the-deployment)
@@ -35,6 +36,7 @@ This is a sample Amazon Bedrock powered serverless chatbot that's deployed throu
 - CloudFront distribution with WAF, security headers, and OAC (commercial)
 - API Gateway with REGIONAL or PRIVATE endpoint support (GovCloud)
 - Full VPC endpoint support for isolated/private deployments
+- Skip RAG mode for PRIVATE deployments that only need direct LLM access
 - Infrastructure as Code with KMS encryption, access logging, and least-privilege IAM
 
 ## 🖥️ UI and Architecture Diagram
@@ -107,6 +109,7 @@ cd sample-bedrock-serverless-react-chatbot/Infrastructure
    - `--guardrail-id <id>` — Bedrock Guardrail ID (default: empty)
    - `--guardrail-version <version>` — Bedrock Guardrail version (default: empty)
    - `--debug` — Print full CloudFormation commands for troubleshooting
+   - `--skip-rag` — Skip RAG infrastructure (works with any endpoint type). If not provided, the script will prompt you interactively.
    - `--rollback` — Delete all stacks created by a previous deployment
 
 3. Check the CloudFormation outputs section for your CloudFront distribution link (commercial) or API Gateway URL (GovCloud) and test out your new RAG Chatbot!
@@ -147,6 +150,27 @@ When deploying with `--api-gateway-endpoint-type PRIVATE`, the API Gateway resou
 - **VPCE ID not provided**: This covers situations where a VPC Endpoint for `execute-api` has not yet been deployed. The resource policy falls back to allowing requests from the entire VPC using the `aws:sourceVpc` condition with the VPC ID. This is less restrictive but ensures the API is accessible while VPC Endpoints are being provisioned.
 
 For REGIONAL endpoints, no resource policy is applied.
+
+## 🚫 Skipping RAG Infrastructure
+
+For deployments that only need direct LLM access (no Knowledge Base or document retrieval), you can skip all RAG infrastructure. This omits OpenSearch Serverless, the Bedrock Knowledge Base, and the KB S3 bucket, reducing deployment time and cost. This works with any endpoint type (REGIONAL, PRIVATE, etc.).
+
+There are two ways to enable this:
+
+1. **CLI flag**: Pass `--skip-rag` when running `deploy.sh`:
+```bash
+./deploy.sh --stack-name my-br-bot --email-domain example.com --skip-rag
+```
+
+2. **Interactive prompt**: When you don't pass `--skip-rag`, the script will ask:
+```
+Do you want to skip RAG infrastructure? (yes/no) [no]:
+```
+
+When RAG is skipped:
+- The default chat type is set to `LLM` (general chat)
+- The UI hides the Knowledge Base management section (document upload, website crawler, KB sync)
+- The chat type dropdown only shows "General Chat" (the RAG option is removed)
 
 ## ⚙️ Runtime Configuration (Config API)
 

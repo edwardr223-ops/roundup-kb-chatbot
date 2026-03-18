@@ -401,6 +401,8 @@ detect_region
 # Parse command line arguments
 ROLLBACK=false
 DEBUG=false
+SKIP_RAG=false
+SKIP_RAG_SET=false
 while [[ $# -gt 0 ]]; do
   key="$1"
   case $key in
@@ -492,6 +494,11 @@ while [[ $# -gt 0 ]]; do
     DEBUG=true
     shift
     ;;
+    --skip-rag)
+    SKIP_RAG=true
+    SKIP_RAG_SET=true
+    shift
+    ;;
     *)
     shift
     ;;
@@ -535,6 +542,7 @@ if [ -z "$STACK_NAME" ]; then
   echo "  --guardrail-version <version>         Bedrock guardrail version (default: empty)"
   echo "  --debug                               Print full CloudFormation commands (for debugging)"
   echo "  --rollback                            Delete all stacks (cleanup)"
+  echo "  --skip-rag                            Skip RAG infrastructure (works with any endpoint type)"
   exit 1
 fi
 
@@ -613,19 +621,6 @@ if [ -z "$VPC_CONFIG_FILE" ]; then
     VPC_CONFIG_FILE="vpc-config.json"
 fi
 
-if [ -f "$VPC_CONFIG_FILE" ]; then
-    load_vpc_config "$VPC_CONFIG_FILE"
-
-    # Use VPC ID from config if --vpc-id was not provided on CLI
-    if [ -z "$VPC_ID" ] && [ -n "$VPC_CONFIG_VPC_ID" ]; then
-        VPC_ID="$VPC_CONFIG_VPC_ID"
-        echo "Using VPC ID from vpc-config.json: $VPC_ID"
-    fi
-
-    # Validate and warn about incomplete configuration
-    validate_vpc_config
-fi
-
 # Handle API Gateway endpoint type for GovCloud deployments
 if [ "$IS_GOVCLOUD" = true ]; then
   if [ -z "$API_GATEWAY_ENDPOINT_TYPE" ]; then
@@ -669,15 +664,72 @@ if [ "$IS_GOVCLOUD" = true ]; then
     fi
   fi
 
+  # Load VPC endpoint configuration for PRIVATE deployments (before VPC ID validation)
+  if [ "$API_GATEWAY_ENDPOINT_TYPE" = "PRIVATE" ] && [ -f "$VPC_CONFIG_FILE" ]; then
+      load_vpc_config "$VPC_CONFIG_FILE"
+
+      # Use VPC ID from config if --vpc-id was not provided on CLI
+      if [ -z "$VPC_ID" ] && [ -n "$VPC_CONFIG_VPC_ID" ]; then
+          VPC_ID="$VPC_CONFIG_VPC_ID"
+          echo "Using VPC ID from vpc-config.json: $VPC_ID"
+      fi
+
+      # Validate and warn about incomplete configuration
+      validate_vpc_config
+  fi
+
   # Validate VPC ID is provided for PRIVATE endpoint type
   if [ "$API_GATEWAY_ENDPOINT_TYPE" = "PRIVATE" ]; then
     if [ -z "$VPC_ID" ]; then
       echo "Error: --vpc-id is required when API Gateway endpoint type is PRIVATE"
-      echo "Please provide a VPC ID using --vpc-id <vpc-id>"
+      echo "Please provide a VPC ID using --vpc-id <vpc-id> or in vpc-config.json"
       exit 1
     fi
     echo "VPC ID for PRIVATE endpoint: $VPC_ID"
   fi
+fi
+
+# Prompt to skip RAG when PRIVATE endpoint is selected and --skip-rag was not explicitly passed
+# Prompt to skip RAG when --skip-rag was not explicitly passed (any endpoint type)
+if [ "$SKIP_RAG_SET" = false ]; then
+  echo ""
+  echo "RAG infrastructure (OpenSearch, Knowledge Base) can be skipped"
+  echo "for deployments that only need direct LLM access."
+  echo ""
+
+  while true; do
+    read -p "Do you want to skip RAG infrastructure? (yes/no) [no]: " skip_rag_input
+
+    # Default to no if user just presses enter
+    if [ -z "$skip_rag_input" ]; then
+      SKIP_RAG=false
+      break
+    fi
+
+    skip_rag_lower=$(echo "$skip_rag_input" | tr '[:upper:]' '[:lower:]')
+
+    case "$skip_rag_lower" in
+      yes|y)
+        SKIP_RAG=true
+        echo "RAG infrastructure will be skipped."
+        break
+        ;;
+      no|n)
+        SKIP_RAG=false
+        echo "RAG infrastructure will be deployed."
+        break
+        ;;
+      *)
+        echo "Invalid input. Please enter yes or no."
+        ;;
+    esac
+  done
+  echo ""
+fi
+
+# When --skip-rag is set, force chat type to LLM (no endpoint-type restriction)
+if [ "$SKIP_RAG" = true ]; then
+  CHAT_TYPE="LLM"
 fi
 
 echo "=========================================="
@@ -691,6 +743,7 @@ echo "Model ID: $MODEL_ID"
 echo "Email Domain: $EMAIL_DOMAIN"
 echo "Stream Responses: $STREAM_RESPONSES"
 echo "GovCloud: $IS_GOVCLOUD"
+echo "Skip RAG: $SKIP_RAG"
 if [ "$IS_GOVCLOUD" = true ]; then
   echo "API Gateway Name: $API_GATEWAY_NAME"
   echo "API Gateway Endpoint Type: $API_GATEWAY_ENDPOINT_TYPE"
@@ -789,7 +842,8 @@ echo "Step 1: Deploying Foundation stack"
 echo "=========================================="
 
 deploy_stack "$STACK_NAME-foundation" "CloudFormation/foundation.yaml" \
-  "UniqueSuffix=$UNIQUE_SUFFIX"
+  "UniqueSuffix=$UNIQUE_SUFFIX" \
+  "SkipRag=$SKIP_RAG"
 
 # Extract Foundation stack outputs
 echo "Extracting Foundation stack outputs..."
@@ -840,14 +894,20 @@ if [ -z "$PERSONA_S3_BUCKET_ARN" ] || [ "$PERSONA_S3_BUCKET_ARN" = "None" ]; the
   exit 1
 fi
 
-if [ -z "$KB_S3_BUCKET" ] || [ "$KB_S3_BUCKET" = "None" ]; then
-  echo "Error: Failed to retrieve KnowledgeBaseS3Bucket name from Foundation stack"
-  exit 1
-fi
+if [ "$SKIP_RAG" != true ]; then
+  if [ -z "$KB_S3_BUCKET" ] || [ "$KB_S3_BUCKET" = "None" ]; then
+    echo "Error: Failed to retrieve KnowledgeBaseS3Bucket name from Foundation stack"
+    exit 1
+  fi
 
-if [ -z "$KB_S3_BUCKET_ARN" ] || [ "$KB_S3_BUCKET_ARN" = "None" ]; then
-  echo "Error: Failed to retrieve KnowledgeBaseS3Bucket ARN from Foundation stack"
-  exit 1
+  if [ -z "$KB_S3_BUCKET_ARN" ] || [ "$KB_S3_BUCKET_ARN" = "None" ]; then
+    echo "Error: Failed to retrieve KnowledgeBaseS3Bucket ARN from Foundation stack"
+    exit 1
+  fi
+else
+  # When RAG is skipped, KB bucket outputs will be "NONE" — that's expected
+  KB_S3_BUCKET="${KB_S3_BUCKET:-NONE}"
+  KB_S3_BUCKET_ARN="${KB_S3_BUCKET_ARN:-NONE}"
 fi
 
 if [ -z "$UI_CODE_S3_BUCKET" ] || [ "$UI_CODE_S3_BUCKET" = "None" ]; then
@@ -891,7 +951,9 @@ echo "=========================================="
 # fi
 
 # Upload Python layer for IndexCreator Lambda function
-if [ -f "$LAMBDA_LAYER_PYTHON_ZIP" ]; then
+if [ "$SKIP_RAG" = true ]; then
+  echo "Skipping Lambda layer upload (RAG skipped)"
+elif [ -f "$LAMBDA_LAYER_PYTHON_ZIP" ]; then
   echo "Uploading Python Lambda layer zip file to $LAYER_BUCKET"
   aws s3 cp $LAMBDA_LAYER_PYTHON_ZIP s3://$LAYER_BUCKET/
   echo "Python Lambda layer uploaded successfully"
@@ -925,7 +987,8 @@ deploy_stack "$STACK_NAME-bedrock" "CloudFormation/bedrock.yaml" \
   "AgentDescription=Bedrock agent for $STACK_NAME chatbot" \
   "AgentFoundationModel=$MODEL_ID" \
   "AgentInstruction=You are a helpful AI assistant. You will only answer based on information from your knowledge base. Never hallucinate, simply say you don't know if you don't have citable information in your knowledge base." \
-  "OSSCollectionName=$STACK_NAME-oss"
+  "OSSCollectionName=$STACK_NAME-oss" \
+  "SkipRag=$SKIP_RAG"
 
 # Extract Bedrock stack outputs
 echo "Extracting Bedrock stack outputs..."
@@ -942,6 +1005,12 @@ fi
 AGENT_ROLE_ARN=$(get_stack_output "$STACK_NAME-bedrock" "AgentRoleArn")
 KB_ID=$(get_stack_output "$STACK_NAME-bedrock" "BedrockKnowledgeBaseId")
 DATASOURCE_ID=$(get_stack_output "$STACK_NAME-bedrock" "BedrockDataSourceId")
+
+# Override KB outputs when RAG is skipped
+if [ "$SKIP_RAG" = true ]; then
+  KB_ID="NONE"
+  DATASOURCE_ID="NONE"
+fi
 
 echo "Bedrock stack outputs:"
 echo "  Knowledge Base S3 Bucket: $KB_S3_BUCKET"
@@ -969,7 +1038,8 @@ deploy_stack "$STACK_NAME-cognito" "CloudFormation/cognito.yaml" \
   "KnowledgeBaseId=$KB_ID" \
   "KnowledgeBaseS3Bucket=$KB_S3_BUCKET" \
   "PersonaS3Bucket=$PERSONA_S3_BUCKET" \
-  "AllowedEmailDomain=$EMAIL_DOMAIN"
+  "AllowedEmailDomain=$EMAIL_DOMAIN" \
+  "SkipRag=$SKIP_RAG"
 
 # Extract Cognito stack outputs
 echo "Extracting Cognito stack outputs..."
@@ -991,6 +1061,11 @@ echo "Step 5: Deploying Config API stack"
 echo "=========================================="
 
 # Build Config API deployment parameters
+RAG_ENABLED="true"
+if [ "$SKIP_RAG" = true ]; then
+  RAG_ENABLED="false"
+fi
+
 CONFIG_API_PARAMS=(
   "LambdaKMSKeyArn=$LAMBDA_KMS_KEY_ARN"
   "CloudWatchLogsKMSKeyArn=$CLOUDWATCH_LOGS_KMS_KEY_ARN"
@@ -1019,6 +1094,7 @@ CONFIG_API_PARAMS=(
 [ -n "$MODEL_NAME" ] && CONFIG_API_PARAMS+=("BedrockDefaultModelName=$MODEL_NAME")
 [ -n "$GUARDRAIL_ID" ] && CONFIG_API_PARAMS+=("BedrockGuardrailId=$GUARDRAIL_ID")
 [ -n "$GUARDRAIL_VERSION" ] && CONFIG_API_PARAMS+=("BedrockGuardrailVersion=$GUARDRAIL_VERSION")
+CONFIG_API_PARAMS+=("RagEnabled=$RAG_ENABLED")
 [ -n "$VPCE_URL_dynamodb" ] && CONFIG_API_PARAMS+=("VpceDynamodb=$VPCE_URL_dynamodb")
 [ -n "$VPCE_URL_bedrock" ] && CONFIG_API_PARAMS+=("VpceBedrock=$VPCE_URL_bedrock")
 [ -n "$VPCE_URL_bedrockRuntime" ] && CONFIG_API_PARAMS+=("VpceBedrockRuntime=$VPCE_URL_bedrockRuntime")
@@ -1212,10 +1288,13 @@ echo "=========================================="
 echo "Step 10: Starting Bedrock knowledge base ingestion"
 echo "=========================================="
 
-echo "Starting ingestion job for Knowledge Base: $KB_ID"
-aws bedrock-agent start-ingestion-job --knowledge-base-id $KB_ID --data-source-id $DATASOURCE_ID
-
-echo "Ingestion job started successfully"
+if [ "$SKIP_RAG" = true ]; then
+  echo "Skipping KB ingestion (RAG skipped)"
+else
+  echo "Starting ingestion job for Knowledge Base: $KB_ID"
+  aws bedrock-agent start-ingestion-job --knowledge-base-id $KB_ID --data-source-id $DATASOURCE_ID
+  echo "Ingestion job started successfully"
+fi
 echo ""
 
 # Display final deployment summary

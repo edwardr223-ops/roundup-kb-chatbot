@@ -52,12 +52,11 @@ Conditions:
 Resources:
 
   # CloudWatch Log Group for API Gateway access logs
-  # Note: If log group already exists, CloudFormation will fail. 
-  # The log group has DeletionPolicy: Retain to preserve logs when stack is deleted.
+  # Note: If log group already exists, CloudFormation will fail.
   APIGatewayLogGroup:
     Type: AWS::Logs::LogGroup
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}"
       RetentionInDays: 90
