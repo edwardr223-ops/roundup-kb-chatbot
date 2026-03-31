@@ -868,9 +868,14 @@ export const getBedrockModels = async (credentials) => {
       inferenceTypesSupported: ['ON_DEMAND']
     }));
     
+    // Filter out LEGACY models
+    const activeFoundationModels = (foundationModelsResponse.modelSummaries || []).filter(
+      model => model.modelLifecycle?.status !== 'LEGACY'
+    );
+
     // Merge the lists
     const allModels = [
-      ...(foundationModelsResponse.modelSummaries || []),
+      ...activeFoundationModels,
       ...normalizedInferenceProfiles
     ];
     
@@ -887,7 +892,11 @@ export const getBedrockModels = async (credentials) => {
       };
       const foundationModelsCommand = new ListFoundationModelsCommand(foundationModelsInput);
       const response = await client.send(foundationModelsCommand);
-      return response;
+      return {
+        modelSummaries: (response.modelSummaries || []).filter(
+          model => model.modelLifecycle?.status !== 'LEGACY'
+        )
+      };
     } catch(fallbackError) {
       console.error('Fallback error:', sanitizeForLog(fallbackError.message));
       throw fallbackError;
