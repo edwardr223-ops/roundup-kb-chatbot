@@ -1,8 +1,6 @@
-// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: MIT-0
+
 import { useState, useEffect, useContext } from 'react';
 import { CredentialsContext } from './SessionContext';
-import { fetchUserAttributes } from 'aws-amplify/auth';
 import { PersonaService } from './PersonaService';
 import PersonaDocumentUpload from './PersonaDocumentUpload';
 import { config } from './aws-config';
@@ -44,15 +42,8 @@ const PersonaManager = ({ onPersonasChange }) => {
   const credentials = useContext(CredentialsContext);
 
   useEffect(() => {
-    const initializeUser = async () => {
-      try {
-        const attributes = await fetchUserAttributes();
-        setUserEmail(attributes.email);
-      } catch (error) {
-        console.error('Error fetching user attributes:', error);
-      }
-    };
-    initializeUser();
+  setUserEmail('local-user');
+  setLoading(false);
   }, []);
 
   useEffect(() => {

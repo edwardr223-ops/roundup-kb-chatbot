@@ -54,3 +54,10 @@
   max-width: 1000px;
   margin: 0 auto;
 }
+
+/* by Edward */
+[class*="top-navigation"] [class*="identity"] img {
+  height: 35px !important;
+  width: 65px !important;
+  max-height: none !important;
+}

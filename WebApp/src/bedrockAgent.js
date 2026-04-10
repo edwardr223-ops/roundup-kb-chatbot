@@ -1,5 +1,4 @@
-// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: MIT-0
+﻿
 import {
   BedrockAgentRuntimeClient,
   InvokeAgentCommand,
@@ -18,7 +17,7 @@ import {
   UpdateDataSourceCommand,
   CreateDataSourceCommand
 } from "@aws-sdk/client-bedrock-agent";
-import { BedrockClient, GetFoundationModelCommand, ListFoundationModelsCommand, ListInferenceProfilesCommand } from "@aws-sdk/client-bedrock";
+import { BedrockClient, GetFoundationModelCommand } from "@aws-sdk/client-bedrock";
 import { BedrockRuntimeClient, ConverseCommand, ConverseStreamCommand, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { bedrockConfig, config, vpceEndpoints } from './aws-config';
 import { sanitizeForLog } from './utils/sanitize';
@@ -152,224 +151,92 @@ export const doesModelSupportStreaming = async (modelId, credentials) => {
 }
 
 export const invokeBedrockAgent = async (prompt, sessionId, credentials, onChunk = null) => {
-  const command = getAgentCommand(prompt, sessionId);
-  const client = new BedrockAgentRuntimeClient({
-    region: bedrockConfig.region,
-    credentials: credentials,
-    ...(vpceEndpoints.bedrockAgentRuntime && { endpoint: vpceEndpoints.bedrockAgentRuntime })
-  });
+  const apiUrl = import.meta.env.VITE_CHAT_API_URL;
 
-  if (config.debug) {
-    console.log(credentials);
+  if (!apiUrl) {
+    throw new Error('VITE_CHAT_API_URL is not configured');
   }
 
   try {
-    let completion = "";
-    let citations = [];
-    const response = await client.send(command);
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: prompt,
+        sessionId: sessionId || null
+      })
+    });
 
-    if (response.completion === undefined) {
-      throw new Error("Completion is undefined");
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Chat API request failed');
     }
 
-    if (config.debug) {
-      console.log("Response:", response);
-      console.log("Response Completion:", response.completion);
-    }
-    for await (let chunkEvent of response.completion) {
-      const chunk = chunkEvent.chunk;
-      if (config.debug) {
-        console.log(chunk);
-      }
-      const decodedResponse = new TextDecoder("utf-8").decode(chunk.bytes);
-      
-      completion += decodedResponse;
-      
-      // Call the streaming callback if provided
-      if (onChunk) {
-        onChunk(decodedResponse);
-      }
-      
-      if (chunk && chunk.attribution && chunk.attribution.citations) {
-        chunk.attribution.citations.forEach(item => {
-          if (item && item.retrievedReferences) {
-            item.retrievedReferences.forEach(ref => {
-              if (ref && ref.location && ref.location.s3Location && ref.location.s3Location.uri) {
-                const uri = ref.location.s3Location.uri;
-                if (!citations.includes(uri)) {
-                  citations.push(uri);
-                }
-              }
-            });
-          }
-        });
-      }
+    const answer = result.answer || '';
+
+    if (onChunk) {
+      onChunk(answer);
     }
 
-    if (citations.length > 0) {
-      completion += '  \n  \nCitations:  \n';
-      for (let i = 0; i < citations.length; i++) {
-        completion += citations[i] + '  \n';
-      }
-    }  
-    return { sessionId: sessionId, completion };
+    return {
+      sessionId: result.sessionId || sessionId,
+      completion: answer,
+      citations: result.citations || []
+    };
   } catch (err) {
     console.error('Invoke Bedrock agent error:', sanitizeForLog(err.message));
+    throw err;
   }
 };
 
 export const invokeBedrockRetrieveAndGenerateStreamCommand = async (prompt, files, sessionId, credentials, modelId, conversationHistory = [], onChunk) => {
-  if (!credentials) {
-    throw new Error('Credentials not provided');
+  const apiUrl = import.meta.env.VITE_CHAT_API_URL;
+
+  if (!apiUrl) {
+    throw new Error('VITE_CHAT_API_URL is not configured');
   }
-
-  if (config.debug) console.log('Model ID:', sanitizeForLog(modelId))
-  const bedrockClient = new BedrockAgentRuntimeClient({
-    region: bedrockConfig.region,
-    credentials: credentials,
-    ...(vpceEndpoints.bedrockAgentRuntime && { endpoint: vpceEndpoints.bedrockAgentRuntime })
-  });
-
-
-  // Validate and format conversation history
-  const formattedHistory = conversationHistory
-    .filter(msg => msg && msg.role && msg.content)
-    .map(msg => ({ role: msg.role, content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }] }));
-
-  // Create new messages array starting with validated history
-  const messages = [...formattedHistory];
-
-  // Prepare the input text
-  let inputText = prompt;
-
-  if (files && files.length > 0) {
-    // Append file information to the prompt if files are present
-    const fileNames = files.map(file => file.name).join(', ');
-    inputText = `${prompt}\n\nReference files: ${fileNames}`;
-  }
-
-  // Default prompt template with instruction to acknowledge when information is not found
-  // IMPORTANT: $output_format_instructions$ is REQUIRED for citations to work
-  const defaultPromptTemplate = `You are a helpful assistant. Use the following context from the knowledge base to answer the question.
-
-$search_results$
-
-Question: $query$
-
-Instructions:
-- Answer the question based on the context provided above
-- If the information needed to answer the question is not found in the context, respond with: "Sorry, I don't have information in my knowledge base to answer that question."
-- Be accurate and provide as much supporting information as possible in your responses
-
-$output_format_instructions$`;
-
-  const input = {
-    ...(sessionId && { sessionId }),
-    input: {
-      text: inputText,
-    },
-    retrieveAndGenerateConfiguration: {
-      type: "KNOWLEDGE_BASE",
-      knowledgeBaseConfiguration: {
-        knowledgeBaseId: bedrockConfig.knowledgeBaseId,
-        modelArn: modelId,
-        retrievalConfiguration: {
-          vectorSearchConfiguration: {
-            numberOfResults: 100,
-          },
-        },
-        generationConfiguration: {
-          promptTemplate: {
-            textPromptTemplate: bedrockConfig.defaultPrompt || defaultPromptTemplate,
-          },
-          guardrailConfiguration: bedrockConfig.useGuardrail ? {
-            guardrailId: bedrockConfig.guardrailId,
-            guardrailVersion: bedrockConfig.guardrailVersion,
-          } : undefined,
-        },
-      },
-    },
-  };  
 
   try {
-    if (config.debug) {
-      console.log('=== RAG REQUEST START ===');
-      console.log('Sending request to Bedrock:', JSON.stringify(input, null, 2));
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: prompt,
+        sessionId: sessionId || null
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Chat API request failed');
     }
 
-    const command = new RetrieveAndGenerateStreamCommand(input);
-    const response = await bedrockClient.send(command);
-    
-    let responseText = '';
-    let citations = [];
-    let eventCount = 0;
-    let outputEventCount = 0;
-    let citationEventCount = 0;
+    const answer = result.answer || '';
 
-    for await (const event of response.stream) {
-      eventCount++;
-      if(config.debug) {
-        console.log(`Event #${eventCount}:`, JSON.stringify(event, null, 2));
-      }
-      if (event.output) {
-        outputEventCount++;
-        const chunkText = event.output.text;
-        responseText += chunkText;
-        
-        if (onChunk) {
-          onChunk(chunkText);
-        }
-      }
-      if (event.citation) {
-        citationEventCount++;
-        if (config.debug) {
-          console.log(`🔍 CITATION EVENT #${citationEventCount} FOUND:`, JSON.stringify(event.citation, null, 2));
-        }
-        // CitationEvent has retrievedReferences at both event.citation.citation
-        // and event.citation level. Normalize into a consistent shape.
-        const citationEvent = event.citation;
-        const innerCitation = citationEvent.citation;
-        citations.push({
-          generatedResponsePart: innerCitation?.generatedResponsePart || citationEvent.generatedResponsePart,
-          retrievedReferences: innerCitation?.retrievedReferences || citationEvent.retrievedReferences || [],
-        });
-        if (config.debug) {
-          console.log(`✅ Citations array now has ${citations.length} items`);
-        }
-      }
+    if (onChunk) {
+      onChunk(answer);
     }
 
-    if(config.debug) {
-      console.log('=== RAG RESPONSE COMPLETE ===');
-      console.log(`Total events: ${eventCount}`);
-      console.log(`Output events: ${outputEventCount}`);
-      console.log(`Citation events: ${citationEventCount}`);
-      console.log('Response object:', response);
-      console.log('FINAL CITATIONS COUNT:', citations.length);
-      if (citations.length > 0) {
-        console.log('FINAL CITATIONS:', JSON.stringify(citations, null, 2));
-      } else {
-        console.log('⚠️ NO CITATIONS WERE FOUND IN THE STREAM');
-      }
-    }
-
-    // Add the response to the conversation history
-    const newMessage = {
-      role: "assistant",
-      content: [{ text: responseText }]
+    return {
+      sessionId: result.sessionId || sessionId,
+      citations: result.citations || [],
+      fullResponse: {
+        metrics: {
+          inputTokenCount: 0,
+          outputTokenCount: 0
+        }
+      },
+      body: answer
     };
-    const updatedHistory = [...conversationHistory, newMessage];
-
-    return { 
-      body: responseText,
-      conversationHistory: updatedHistory,
-      citations: citations,
-      sessionId: response.sessionId,
-      fullResponse: response
-    };
-  } catch (error) {
-    console.error('Error invoking Bedrock:', error);
-    throw error;
+  } catch (err) {
+    console.error('Invoke Bedrock RetrieveAndGenerate error:', sanitizeForLog(err.message));
+    throw err;
   }
 };
 
@@ -835,73 +702,40 @@ export const getSyncStatus = async (ingestionJobId, credentials) => {
 };
 
 export const getBedrockModels = async (credentials) => {
-  const client = new BedrockClient({
-    region: bedrockConfig.region,
-    credentials: credentials,
-    ...(vpceEndpoints.bedrock && { endpoint: vpceEndpoints.bedrock })
-  });
-  
-  try {
-    // Get foundation models
-    const foundationModelsInput = {
-      byOutputModality: "TEXT",
-      byInferenceType: "ON_DEMAND",
-    };
-    const foundationModelsCommand = new ListFoundationModelsCommand(foundationModelsInput);
-    const foundationModelsResponse = await client.send(foundationModelsCommand);
-    
-    // Get inference profiles
-    const inferenceProfilesCommand = new ListInferenceProfilesCommand({});
-    const inferenceProfilesResponse = await client.send(inferenceProfilesCommand);
-
-    if(config.debug) console.log("Inference Profiles:", inferenceProfilesResponse);
-    
-    // Normalize inference profiles to match foundation model structure
-    const normalizedInferenceProfiles = (inferenceProfilesResponse.inferenceProfileSummaries || []).map(profile => ({
-      modelId: profile.inferenceProfileId,
-      modelName: profile.inferenceProfileName,
-      providerName: profile.inferenceProfileName.split(' ')[1] || 'Unknown', // Extract provider from name
-      inputModalities: ['TEXT'],
-      outputModalities: ['TEXT'],
-      responseStreamingSupported: true, // Assume true for inference profiles
-      customizationsSupported: [],
-      inferenceTypesSupported: ['ON_DEMAND']
-    }));
-    
-    // Filter out LEGACY models
-    const activeFoundationModels = (foundationModelsResponse.modelSummaries || []).filter(
-      model => model.modelLifecycle?.status !== 'LEGACY'
-    );
-
-    // Merge the lists
-    const allModels = [
-      ...activeFoundationModels,
-      ...normalizedInferenceProfiles
-    ];
-    
-    return {
-      modelSummaries: allModels
-    };
-  } catch(e) {
-    console.error('Get Bedrock models error:', sanitizeForLog(e.message));
-    // Fallback to just foundation models if inference profiles fail
-    try {
-      const foundationModelsInput = {
-        byOutputModality: "TEXT",
-        byInferenceType: "ON_DEMAND",
-      };
-      const foundationModelsCommand = new ListFoundationModelsCommand(foundationModelsInput);
-      const response = await client.send(foundationModelsCommand);
-      return {
-        modelSummaries: (response.modelSummaries || []).filter(
-          model => model.modelLifecycle?.status !== 'LEGACY'
-        )
-      };
-    } catch(fallbackError) {
-      console.error('Fallback error:', sanitizeForLog(fallbackError.message));
-      throw fallbackError;
-    }
-  }
+  return {
+    modelSummaries: [
+      {
+        modelId: "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        modelName: "Claude 3.7 Sonnet",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      },
+      {
+        modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        modelName: "Claude 3.5 Sonnet",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      },
+      {
+        modelId: "anthropic.claude-3-haiku-20240307-v1:0",
+        modelName: "Claude 3 Haiku",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      }
+    ]
+  };
 }
 
 export const getBedrockAgent = async (credentials) => {
@@ -1059,3 +893,5 @@ export const getBedrockAgentAliasStatus = async (credentials, aliasId) => {
     console.error('Get Bedrock agent alias status error:', sanitizeForLog(e.message));
   }
 }  
+
+

@@ -1,5 +1,4 @@
-// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: MIT-0
+﻿
 import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { CredentialsContext } from './SessionContext';
 import { fetchAuthSession, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
@@ -48,8 +47,6 @@ import {
 } from './bedrockAgent';
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import PersonaSelector from './PersonaSelector';
-import { PersonaService } from './PersonaService';
 import { sanitizeForLog } from './utils/sanitize';
 import DocumentViewer, { isViewableFile } from './DocumentViewer';
 import KbStatusBanner from './KbStatusBanner';
@@ -223,7 +220,7 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
   const [viewerState, setViewerState] = useState({ visible: false, fileName: '', fileUrl: null, fileUri: '', citationTexts: [] });
 
   if (config.debug) {
-    console.log('📊 CitationBar component called');
+    console.log('ðŸ“Š CitationBar component called');
     console.log('  - Citations prop:', citations);
     console.log('  - Citations type:', Array.isArray(citations) ? 'array' : typeof citations);
     console.log('  - Citations length:', citations?.length || 0);
@@ -231,7 +228,7 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
 
   if (!citations || citations.length === 0) {
     if (config.debug) {
-      console.log('⚠️ CitationBar: No citations to display (returning null)');
+      console.log('âš ï¸ CitationBar: No citations to display (returning null)');
     }
     return null;
   }
@@ -466,7 +463,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
   const citationChipRefs = useRef({});
 
   if (config.debug && !isUser) {
-    console.log('🎨 ChatMessage rendering assistant message');
+    console.log('ðŸŽ¨ ChatMessage rendering assistant message');
     console.log('  - Message has citations:', !!message.citations);
     console.log('  - Citations count:', message.citations?.length || 0);
     if (message.citations && message.citations.length > 0) {
@@ -656,7 +653,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
             </ReactMarkdown>
           )}
           {isStreaming && (
-            <span className="cursor-blink">▋</span>
+            <span className="cursor-blink">â–‹</span>
           )}
         </Box>
         {!isUser && !isStreaming && message.citations && (
@@ -947,55 +944,14 @@ const ChatUI = React.forwardRef(({
   
     if (config.debug) {
       console.log('Current session messages before new message:', currentSessionMessages);
-    }
+    }    // Persona disabled for Lambda-only mode
+    const selectedPersona = null;
+    const personaPrompt = '';
+    const enhancedInput = input;
 
-    // Get the selected persona and its documents
-    const selectedPersona = personas.find(p => p.id === selectedPersonaId);
-    const personaPrompt = await PersonaService.getPersonaPrompt(userEmail, selectedPersonaId, credentials);
-    const enhancedInput = personaPrompt ? `${personaPrompt}\n\nUser: ${input}` : input;
-    
-    // Convert persona documents to File objects
+    // Persona documents disabled for Lambda-only mode
     const personaFiles = [];
-    if (selectedPersona?.documents?.length > 0) {
-      // Construct S3 endpoint with "bucket." prefix for VPC endpoint
-      const getS3Endpoint = () => {
-        if (vpceEndpoints.s3) {
-          const vpceUrl = new URL(vpceEndpoints.s3);
-          vpceUrl.hostname = `bucket.${vpceUrl.hostname}`;
-          return vpceUrl.toString();
-        }
-        return undefined;
-      };
 
-      const s3Client = new S3Client({
-        region: bedrockConfig.region,
-        credentials,
-        ...(vpceEndpoints.s3 && { endpoint: getS3Endpoint() }),
-        ...(vpceEndpoints.s3 && { forcePathStyle: true })
-      });
-      
-      for (const doc of selectedPersona.documents) {
-        try {
-          const getObjectCommand = new GetObjectCommand({
-            Bucket: bedrockConfig.personaS3Bucket,
-            Key: doc.key
-          });
-          
-          const response = await s3Client.send(getObjectCommand);
-          const arrayBuffer = await response.Body.transformToByteArray();
-          
-          // Create File-like object
-          const file = new File([arrayBuffer], doc.name, {
-            type: doc.type || 'application/octet-stream'
-          });
-          
-          personaFiles.push(file);
-        } catch (error) {
-          console.error(`Error fetching persona document ${sanitizeForLog(doc.name)}:`, sanitizeForLog(error.message));
-        }
-      }
-    }
-    
     // Combine uploaded files with persona files
     const allFiles = [...files, ...personaFiles];
   
@@ -1018,9 +974,6 @@ const ChatUI = React.forwardRef(({
     setIsLoading(true);
   
     try {
-      if (!modelId) {
-        throw new Error('Model ID is required');
-      }
   
       if (config.debug) {
         console.log('Current session messages before formatting:', currentSessionMessages);
@@ -1109,7 +1062,7 @@ const ChatUI = React.forwardRef(({
         // Attach citations to the assistant message
         if (citations.length > 0) {
           if (config.debug) {
-            console.log('✅ Attaching', citations.length, 'citations to assistant message');
+            console.log('âœ… Attaching', citations.length, 'citations to assistant message');
           }
           setCurrentSessionMessages(prevMessages => {
             const lastMessage = prevMessages[prevMessages.length - 1];
@@ -1120,20 +1073,20 @@ const ChatUI = React.forwardRef(({
                   : msg
               );
               if (config.debug) {
-                console.log('✅ Updated last message with citations');
+                console.log('âœ… Updated last message with citations');
                 console.log('Last message now has citations:', updated[updated.length - 1].citations);
               }
               return updated;
             } else {
               if (config.debug) {
-                console.log('⚠️ Last message is not an assistant message, cannot attach citations');
+                console.log('âš ï¸ Last message is not an assistant message, cannot attach citations');
               }
             }
             return prevMessages;
           });
         } else {
           if (config.debug) {
-            console.log('⚠️ No citations to attach - citations array is empty');
+            console.log('âš ï¸ No citations to attach - citations array is empty');
           }
         }
   
@@ -1434,39 +1387,7 @@ const ChatUI = React.forwardRef(({
                           />
                         </div>
                       </Popover>
-                      <Popover
-                        dismissButton={false}
-                        triggerType="custom"
-                        content={
-                          <div style={{ minWidth: '250px' }}>
-                            <PersonaSelector
-                              selectedPersonaId={selectedPersonaId}
-                              onPersonaChange={setSelectedPersonaId}
-                              personas={personas}
-                            />
-                          </div>
-                        }
-                      >
-                        <div style={{ position: 'relative' }}>
-                          <Button
-                            iconName="user-profile"
-                            variant="icon"
-                            ariaLabel={`Persona: ${personas.find(p => p.id === selectedPersonaId)?.name || 'Select'}`}
-                          />
-                          {selectedPersonaId !== 'default' && (
-                            <div style={{
-                              position: 'absolute',
-                              top: '-2px',
-                              right: '-2px',
-                              width: '10px',
-                              height: '10px',
-                              borderRadius: '50%',
-                              backgroundColor: '#00875a',
-                              border: '2px solid white'
-                            }} />
-                          )}
-                        </div>
-                      </Popover>
+        
                     </>
                   ) : (
                     <>
@@ -1499,13 +1420,7 @@ const ChatUI = React.forwardRef(({
                           filteringType="auto"
                         />
                       </div>
-                      <div style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
-                        <PersonaSelector
-                          selectedPersonaId={selectedPersonaId}
-                          onPersonaChange={setSelectedPersonaId}
-                          personas={personas}
-                        />
-                      </div>
+                    
                     </>
                   )}
                   <Button
@@ -1581,3 +1496,10 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
+
+
+
+
+
+
+

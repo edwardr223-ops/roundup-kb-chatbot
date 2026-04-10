@@ -1,8 +1,4 @@
-// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: MIT-0
 import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
-import { signOut, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
-import { CredentialsContext } from './SessionContext';
 import "@cloudscape-design/global-styles/index.css"
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 import {
@@ -28,7 +24,7 @@ import WebsiteCrawler from './WebsiteCrawler';
 import PersonaManager from './PersonaManager';
 
 import './Layout.css';
-import AWS_Logo from './images/AWS.png';
+import AWS_Logo from './images/logo.png';
 import { getBedrockModels, getBedrockAgentModel, setBedrockAgentModel, updateBedrockAgentModel } from './bedrockAgent';
 import KbSync from './KbSync';
 import AgentInstructions from './AgentInstructions';
@@ -49,13 +45,13 @@ function Layout() {
   const [websiteCrawlerVisible, setWebsiteCrawlerVisible] = useState(false);
   const [personaManagerVisible, setPersonaManagerVisible] = useState(false);
   const [activeModalTitle, setActiveModalTitle] = useState("");
+  const credentials = null;
   const [navigationOpen, setNavigationOpen] = useState(true);
-  const credentials = useContext(CredentialsContext);
   const [topNavModels, setTopNavModels] = useState([]);
   const [foundationModels, setFoundationModels] = useState([]);
   const [chatTypes, setChatTypes] = useState([
-    { id: 'RAG', text: 'Bedrock Knowledge Base Chat (RAG)' },
-    { id: 'LLM', text: 'General Chat' }
+    { id: 'RAG', text: 'RAG' },
+    { id: 'LLM', text: 'LLM' }
   ]);
   const [chatType, setChatType] = useState(bedrockConfig.defaultChatType);
   const [modelId, setModelId] = useState(bedrockConfig.defaultModelId);
@@ -187,17 +183,17 @@ function Layout() {
         const models = await getBedrockModels(credentials);
         setFoundationModels(models.modelSummaries);
         const formattedModels = models.modelSummaries.map(model => ({
-          id: model.modelId,
-          text: `${model.providerName} ${model.modelName}: ${model.modelId}`
+        id: model.modelId,
+        text: model.modelName
         }));
         
         // Add default model if not in the list
         const defaultModelExists = formattedModels.some(model => model.id === bedrockConfig.defaultModelId);
         if (!defaultModelExists) {
           formattedModels.push({
-            id: bedrockConfig.defaultModelId,
-            text: `${bedrockConfig.defaultModelProvider} ${bedrockConfig.defaultModelName}: ${bedrockConfig.defaultModelId}`
-          });
+      id: bedrockConfig.defaultModelId,
+      text: bedrockConfig.defaultModelName
+      });
         }
         
         formattedModels.sort((a, b) => a.text.localeCompare(b.text));
@@ -211,20 +207,6 @@ function Layout() {
     }
     populateTopNavModels();
   }, [credentials]);
-
-  useEffect(() => {
-    async function fetchUsername() {
-      try {
-        const user = await getCurrentUser();
-        const attributes = await fetchUserAttributes();
-        setEmail(attributes.email);
-        setUsername(attributes.email);
-      } catch (error) {
-        console.error('Error fetching user:', error);
-      }
-    }
-    fetchUsername();
-  }, []);
 
   function toggleS3Uploader() {
     setS3UploadVisible(!s3UploadVisible);
@@ -372,14 +354,14 @@ function Layout() {
       <TopNavigation
         identity={{
           href: "#",
-          title: "Amazon Bedrock Chatbot powered by AWS",
+          title: "Facture Transcript Tool (Roundup)",
           logo: { src: logo, alt: "Amazon Web Services" }
         }}
         utilities={[
           {
             type: "button",
-            text: "Amazon Bedrock",
-            href: "https://aws.amazon.com/bedrock/",
+            text: "Monverse",
+            href: "https://df0zrsyyn1kkk.cloudfront.net/monverse/",
             external: true,
             externalIconAriaLabel: " (opens in a new tab)"
           },
@@ -449,30 +431,6 @@ function Layout() {
                 }
               }}
               items={[
-                ...(ragEnabled ? [{ 
-                  type: 'section', 
-                  text: 'Knowledge Base Updates', 
-                  items: [
-                    { type: 'link', text: `Upload documents to S3`, href: `upload` },
-                    { type: 'link', text: `Add website to crawl`, href: `crawl` },
-                    { type: 'link', text: `Sync Bedrock Knowledge Base`, href: `sync` },
-                  ]
-                }] : []),
-                { 
-                  type: 'section', 
-                  text: 'Agent Configuration', 
-                  items: [
-                    { type: 'link', text: `Update Bedrock Agent Instructions`, href: `instructions` }
-                  ]
-                },
-                { 
-                  type: 'section', 
-                  text: 'Personas', 
-                  items: [
-                    { type: 'link', text: `Manage AI Personas`, href: `personas` }
-                  ]
-                },
-                // In the SideNavigation items array, update the conversation history section:
                 { 
                   type: 'section', 
                   text: 'Conversation History',
@@ -629,7 +587,7 @@ function Layout() {
                   header={activeModalTitle}
                   size="large"
                 >
-                  <AgentInstructions />
+                  <div>Agent instructions temporarily disabled.</div>
                 </Modal>
 
                 <Modal

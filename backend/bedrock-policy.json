@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KbAccess",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Retrieve",
+        "bedrock:RetrieveAndGenerate"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:439476018149:knowledge-base/BCJ9FNX552"
+      ]
+    },
+    {
+      "Sid": "GrantGeoCrisInferenceProfileAccess",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:GetInferenceProfile"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:439476018149:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      ]
+    },
+    {
+      "Sid": "GrantGeoCrisModelAccess",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:us-east-1:439476018149:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        }
+      }
+    }
+  ]
+}
