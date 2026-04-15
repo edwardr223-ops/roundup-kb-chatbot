@@ -3,6 +3,12 @@
     -webkit-text-size-adjust: 100%;
   }
 
+  textarea,
+  input,
+  select {
+    font-size: 16px !important;
+  }
+
   .awsui-app-layout__navigation {
     display: none !important;
   }
