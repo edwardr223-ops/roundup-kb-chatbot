@@ -1151,7 +1151,7 @@ const ChatUI = React.forwardRef(({
 
         const dynPayload = {
           sessionID: chatSessionId,
-          userID: 'local-user',
+          userID: localStorage.getItem('chat_user_id') || 'local-user',
           question: input,
           response: chatType === 'RAG' ? (result.completion || streamedResponse || '') : streamedResponse,
           inputTokens: inputTokens,
