@@ -766,7 +766,6 @@ const ChatUI = React.forwardRef(({
       try {
         if (!username) {
           const user = await getCurrentUser();
-          const attributes = await fetchUserAttributes();
           const email = attributes.email;
           setUserEmail(email);
           setUserInitials(email.charAt(0).toUpperCase());
@@ -1125,7 +1124,6 @@ const ChatUI = React.forwardRef(({
   
       // Save conversation to history for both chat types
       try {
-        const attributes = await fetchUserAttributes();
         
         // Get token counts from the API response if available, otherwise estimate
         let inputTokens, outputTokens;
