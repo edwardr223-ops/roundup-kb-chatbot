@@ -744,7 +744,7 @@ const ChatUI = React.forwardRef(({
   // Force chatType to LLM when RAG is disabled
   useEffect(() => {
     if (!ragEnabled && chatType === 'RAG') {
-      setChatType('LLM');
+      
     }
   }, [ragEnabled, chatType, setChatType]);
 
@@ -921,7 +921,6 @@ const ChatUI = React.forwardRef(({
 
       // Restore model, chat type, and persona from history if available
       if (historyModelId) setModelId(historyModelId);
-      if (historyChatType) setChatType(historyChatType);
       const restoredPersona = historyPersonaId && personas.some(p => p.id === historyPersonaId)
         ? historyPersonaId
         : 'default';
@@ -1320,7 +1319,7 @@ const ChatUI = React.forwardRef(({
             <Header
               variant="h1"
               description={chatType === 'RAG' 
-                ? 'Ask me questions about your document knowledge base.' 
+                ? 'Ask me questions about Roundup trial transcrips, depositions, hearings or pleadings.' 
                 : chatType === 'Agentic'
                 ? 'Ask me anything and I also have the ability to send emails and search the web.'
                 : 'Ask me anything.'}
@@ -1333,18 +1332,7 @@ const ChatUI = React.forwardRef(({
                         triggerType="custom"
                         content={
                           <div style={{ minWidth: '250px' }}>
-                            <Select
-                              selectedOption={chatTypeOptions.find(type => type.value === chatType) || null}
-                              onChange={({ detail }) => {
-                                if(config.debug) {
-                                  console.log('Chat type changed to:', detail.selectedOption.value);
-                                }
-                                setChatType(detail.selectedOption.value);
-                              }}
-                              options={chatTypeOptions}
-                              placeholder="Select assistant type"
-                              expandToViewport
-                            />
+                            
                           </div>
                         }
                       >
@@ -1390,18 +1378,7 @@ const ChatUI = React.forwardRef(({
                   ) : (
                     <>
                       <div style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
-                        <Select
-                          selectedOption={chatTypeOptions.find(type => type.value === chatType) || null}
-                          onChange={({ detail }) => {
-                            if(config.debug) {
-                              console.log('Chat type changed to:', detail.selectedOption.value);
-                            }
-                            setChatType(detail.selectedOption.value);
-                          }}
-                          options={chatTypeOptions}
-                          placeholder="Select assistant type"
-                          expandToViewport
-                        />
+                        
                       </div>
                       <div style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
                         <Select
@@ -1438,7 +1415,7 @@ const ChatUI = React.forwardRef(({
                 </div>
               }
             >
-              Chat UI
+              AI Transcipt Assistant
             </Header>
             {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
             <div className="chat-ui-scroll-container" ref={chatContainerRef}>
@@ -1494,6 +1471,9 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
+
+
+
 
 
 

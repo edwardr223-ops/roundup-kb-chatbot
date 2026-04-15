@@ -334,7 +334,7 @@ function Layout() {
       <TopNavigation
         identity={{
           href: "#",
-          title: "Facture Transcript Tool (Roundup)",
+          title: "Clark Love & Hutson PLLC",
           logo: { src: logo, alt: "Amazon Web Services" }
         }}
         utilities={[
