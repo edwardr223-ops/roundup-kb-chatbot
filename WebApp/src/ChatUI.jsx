@@ -1165,7 +1165,7 @@ const ChatUI = React.forwardRef(({
           timestamp: savedTimestamp
         };
 
-        await convHistory.saveConversation(dynPayload);
+        console.log('SAVING HISTORY', dynPayload); await convHistory.saveConversation(dynPayload);
 
         // Update the assistant message with the actual saved timestamp
         setCurrentSessionMessages(prevMessages => {
