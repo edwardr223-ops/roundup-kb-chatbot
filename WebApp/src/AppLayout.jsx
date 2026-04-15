@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import "@cloudscape-design/global-styles/index.css"
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 import {
@@ -172,7 +172,7 @@ function Layout() {
       try {
         const history = await convHistory.loadUserHistory('local-user');
         if (config.debug) {
-          console.log('Fetched local conversation history:', history);
+          console.log('Fetched local Chat History:', history);
         }
 
         if (Array.isArray(history) && history.length > 0) {
@@ -181,7 +181,7 @@ function Layout() {
           setConversationHistory([]);
         }
       } catch (error) {
-        console.error('Error fetching conversation history:', error);
+        console.error('Error fetching Chat History:', error);
       }
     }
 
@@ -413,7 +413,7 @@ function Layout() {
               items={[
                 { 
                   type: 'section', 
-                  text: 'Conversation History',
+                  text: 'Chat History',
                   items: (() => {
                     if (!conversationHistory) return [];
 
@@ -492,9 +492,9 @@ function Layout() {
                                           <div style={{ display: 'flex', gap: '8px', marginTop: '4px', width: '100%', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                               <span style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>Estimated Tokens:</span>
-                                              <span title="Input tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>â¬†ï¸ {inputTokens}</span>
-                                              <span title="Output tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>â¬‡ï¸ {outputTokens}</span>
-                                              {/* <span title="Total cost" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', marginLeft: '8px' }}>ðŸ’° ${totalCost.toFixed(2)}</span> */}
+                                              <span title="Input tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>⬆️ {inputTokens}</span>
+                                              <span title="Output tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>⬇️ {outputTokens}</span>
+                                              {/* <span title="Total cost" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', marginLeft: '8px' }}>💰 ${totalCost.toFixed(2)}</span> */}
                                             </div>
                                           </div>
                                         </div>
@@ -522,7 +522,7 @@ function Layout() {
                       
                       return result;
                     } catch (error) {
-                      console.error('Error processing conversation history:', error);
+                      console.error('Error processing Chat History:', error);
                       return [];
                     }
                   })()

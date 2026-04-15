@@ -1,4 +1,4 @@
-﻿// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
 const CONFIG_STORAGE_KEY = 'appConfig';

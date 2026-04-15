@@ -804,7 +804,7 @@ const ChatUI = React.forwardRef(({
   const skipResetRef = useRef(0);
 
   // Reset session and clear messages when model changes
-  // This prevents the new model from seeing the old model's responses in conversation history
+  // This prevents the new model from seeing the old model's responses in Chat History
   useEffect(() => {
     if (skipResetRef.current > 0) {
       skipResetRef.current--;
@@ -859,11 +859,11 @@ const ChatUI = React.forwardRef(({
     }
   }, [conversationHistory]);
 
-  // Handle conversation history changes
+  // Handle Chat History changes
   useEffect(() => {
     if (conversationHistory.length > 0) {
       if (config.debug) {
-        console.log('Converting conversation history:', conversationHistory);
+        console.log('Converting Chat History:', conversationHistory);
       }
       const formattedMessages = [];
       
@@ -985,7 +985,7 @@ const ChatUI = React.forwardRef(({
       }));
   
       if (config.debug) {
-        console.log('Formatted conversation history for Bedrock:', JSON.stringify(formattedHistory, null, 2));
+        console.log('Formatted Chat History for Bedrock:', JSON.stringify(formattedHistory, null, 2));
         console.log('Supports streaming: ', getModelItem(foundationModels, modelId, 'responseStreamingSupported'));
       }
   
@@ -1431,9 +1431,9 @@ const ChatUI = React.forwardRef(({
                     }}
                     iconName="refresh"
                     variant={isMobile ? "icon" : undefined}
-                    ariaLabel={isMobile ? "New Session" : undefined}
+                    ariaLabel={isMobile ? "New Chat" : undefined}
                   >
-                    {isMobile ? "" : "New Session"}
+                    {isMobile ? "" : "New Chat"}
                   </Button>
                 </div>
               }

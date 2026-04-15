@@ -1,4 +1,4 @@
-﻿
+
 import {
   BedrockAgentRuntimeClient,
   InvokeAgentCommand,
@@ -251,7 +251,7 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
     ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
   });
 
-  // Validate and format conversation history
+  // Validate and format Chat History
   const formattedHistory = conversationHistory
     .filter(msg => msg && msg.role && msg.content)
     .map(msg => ({ role: msg.role, content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }] }));
@@ -308,7 +308,7 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
       }
     }
 
-    // Add the complete messages to the conversation history
+    // Add the complete messages to the Chat History
     const validCompleteMessages = [
       ...formattedHistory,
       { role: 'user', content: messages.find(m => m.role === 'user').content },
@@ -344,7 +344,7 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
     ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
   });
 
-  // Validate and format conversation history
+  // Validate and format Chat History
   const formattedHistory = conversationHistory
     .filter(msg => msg && msg.role && msg.content) // Filter out invalid messages
     .map(msg => ({
@@ -476,7 +476,7 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
       }
     }
 
-    // Add the complete messages to the conversation history
+    // Add the complete messages to the Chat History
     const validCompleteMessages = completeMessages.filter(msg => msg && msg.role && msg.content);
     messages.push(...validCompleteMessages);
 
