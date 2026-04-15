@@ -1,0 +1,38 @@
+@media (max-width: 768px) {
+
+  .awsui-app-layout__navigation {
+    display: none !important;
+  }
+
+  .awsui-app-layout__content {
+    margin-left: 0 !important;
+  }
+
+  .chat-controls,
+  .header-controls {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100%;
+  }
+
+  .chat-controls select,
+  .chat-controls input,
+  .header-controls select,
+  .header-controls input {
+    width: 100% !important;
+  }
+
+  .awsui-side-navigation * {
+    font-size: 0.85rem !important;
+  }
+
+  .awsui-side-navigation span[title="Input tokens"],
+  .awsui-side-navigation span[title="Output tokens"] {
+    display: none !important;
+  }
+
+  .awsui-side-navigation .awsui-box {
+    padding: 6px !important;
+  }
+}
