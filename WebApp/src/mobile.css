@@ -1,4 +1,7 @@
 @media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
 
   .awsui-app-layout__navigation {
     display: none !important;
