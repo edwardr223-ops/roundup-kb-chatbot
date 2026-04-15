@@ -1141,7 +1141,7 @@ const ChatUI = React.forwardRef(({
         } else {
           // Fall back to estimation
           inputTokens = Math.ceil(input.length / 4);
-          outputTokens = Math.ceil((chatType === 'RAG' ? result.body : streamedResponse).length / 4);
+          outputTokens = Math.ceil((chatType === 'RAG' ? (result.completion || streamedResponse || '') : streamedResponse).length / 4);
 
           if (config.debug) {
             console.log('Using estimated token counts:', { inputTokens, outputTokens });
