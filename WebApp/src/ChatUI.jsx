@@ -1182,7 +1182,7 @@ const ChatUI = React.forwardRef(({
         setConversationHistory(historyResponse);
       } catch (error) {
         if (config.debug) {
-          console.error('DynamoDB Error:', sanitizeForLog(error.message));
+          console.error('History Save Error:', error);
         }
       }
     } catch (error) {
