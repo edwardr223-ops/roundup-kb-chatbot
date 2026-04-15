@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import "@cloudscape-design/global-styles/index.css"
 import { applyMode, Mode } from '@cloudscape-design/global-styles';
 import {
@@ -47,14 +47,43 @@ function Layout() {
   const [activeModalTitle, setActiveModalTitle] = useState("");
   const credentials = null;
   const [navigationOpen, setNavigationOpen] = useState(true);
-  const [topNavModels, setTopNavModels] = useState([]);
-  const [foundationModels, setFoundationModels] = useState([]);
+  const [topNavModels, setTopNavModels] = useState([
+    {
+      id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      text: 'Claude 3.5 Sonnet'
+    },
+    {
+      id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      text: 'Claude Sonnet 4.5'
+    },
+    {
+      id: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
+      text: 'Claude 3.7 Sonnet'
+    }
+  ]);
+  const [foundationModels, setFoundationModels] = useState([
+    {
+      modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      modelName: 'Claude 3.5 Sonnet',
+      responseStreamingSupported: true
+    },
+    {
+      modelId: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      modelName: 'Claude Sonnet 4.5',
+      responseStreamingSupported: true
+    },
+    {
+      modelId: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
+      modelName: 'Claude 3.7 Sonnet',
+      responseStreamingSupported: true
+    }
+  ]);
   const [chatTypes, setChatTypes] = useState([
     { id: 'RAG', text: 'RAG' },
     { id: 'LLM', text: 'LLM' }
   ]);
   const [chatType, setChatType] = useState(bedrockConfig.defaultChatType);
-  const [modelId, setModelId] = useState(bedrockConfig.defaultModelId);
+  const [modelId, setModelId] = useState(null);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [mode, setMode] = useState("Dark");
   const [personaRefreshTrigger, setPersonaRefreshTrigger] = useState(0);
@@ -144,69 +173,23 @@ function Layout() {
   useEffect(() => {
     async function fetchConversationHistory() {
       try {
-        const user = await getCurrentUser();
-        const attributes = await fetchUserAttributes();
-        const userEmail = attributes.email;
-  
-        if(config.debug) {
-          console.log('Fetching conversation history for user:', userEmail);
+        const history = await convHistory.loadUserHistory('local-user');
+        if (config.debug) {
+          console.log('Fetched local conversation history:', history);
         }
-        
-        const history = await convHistory.loadUserHistory(userEmail, credentials);
-        if(config.debug) {
-          console.log('Fetched conversation history:', history);
-        }
-        
+
         if (Array.isArray(history) && history.length > 0) {
-          if(config.debug) {
-            console.log('Setting conversation history:', history);
-          }
           setConversationHistory(history);
         } else {
-          if(config.debug) {
-            console.log('No conversation history found or empty history array');
-          }
+          setConversationHistory([]);
         }
       } catch (error) {
         console.error('Error fetching conversation history:', error);
       }
     }
-  
-    if (credentials) {
-      fetchConversationHistory();
-    }
-  }, [credentials]);
 
-  useEffect(() => {
-    async function populateTopNavModels() {
-      try {
-        const models = await getBedrockModels(credentials);
-        setFoundationModels(models.modelSummaries);
-        const formattedModels = models.modelSummaries.map(model => ({
-        id: model.modelId,
-        text: model.modelName
-        }));
-        
-        // Add default model if not in the list
-        const defaultModelExists = formattedModels.some(model => model.id === bedrockConfig.defaultModelId);
-        if (!defaultModelExists) {
-          formattedModels.push({
-      id: bedrockConfig.defaultModelId,
-      text: bedrockConfig.defaultModelName
-      });
-        }
-        
-        formattedModels.sort((a, b) => a.text.localeCompare(b.text));
-        setTopNavModels(formattedModels);
-        if(config.debug) {
-          console.log('Fetched models:', models.modelSummaries);
-        }
-      } catch (error) {
-        console.error('Error:', error);
-      }
-    }
-    populateTopNavModels();
-  }, [credentials]);
+    fetchConversationHistory();
+  }, []);
 
   function toggleS3Uploader() {
     setS3UploadVisible(!s3UploadVisible);
@@ -512,9 +495,9 @@ function Layout() {
                                           <div style={{ display: 'flex', gap: '8px', marginTop: '4px', width: '100%', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                               <span style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>Estimated Tokens:</span>
-                                              <span title="Input tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>⬆️ {inputTokens}</span>
-                                              <span title="Output tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>⬇️ {outputTokens}</span>
-                                              {/* <span title="Total cost" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', marginLeft: '8px' }}>💰 ${totalCost.toFixed(2)}</span> */}
+                                              <span title="Input tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>â¬†ï¸ {inputTokens}</span>
+                                              <span title="Output tokens" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center' }}>â¬‡ï¸ {outputTokens}</span>
+                                              {/* <span title="Total cost" style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', marginLeft: '8px' }}>ðŸ’° ${totalCost.toFixed(2)}</span> */}
                                             </div>
                                           </div>
                                         </div>
@@ -658,3 +641,6 @@ function moonIcon() {
 }
 
 export default Layout;
+
+
+

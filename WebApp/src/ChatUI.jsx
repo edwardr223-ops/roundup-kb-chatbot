@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { CredentialsContext } from './SessionContext';
 import { fetchAuthSession, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
@@ -220,7 +220,7 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
   const [viewerState, setViewerState] = useState({ visible: false, fileName: '', fileUrl: null, fileUri: '', citationTexts: [] });
 
   if (config.debug) {
-    console.log('ðŸ“Š CitationBar component called');
+    console.log('📊 CitationBar component called');
     console.log('  - Citations prop:', citations);
     console.log('  - Citations type:', Array.isArray(citations) ? 'array' : typeof citations);
     console.log('  - Citations length:', citations?.length || 0);
@@ -228,7 +228,7 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
 
   if (!citations || citations.length === 0) {
     if (config.debug) {
-      console.log('âš ï¸ CitationBar: No citations to display (returning null)');
+      console.log('⚠️ CitationBar: No citations to display (returning null)');
     }
     return null;
   }
@@ -463,7 +463,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
   const citationChipRefs = useRef({});
 
   if (config.debug && !isUser) {
-    console.log('ðŸŽ¨ ChatMessage rendering assistant message');
+    console.log('🎨 ChatMessage rendering assistant message');
     console.log('  - Message has citations:', !!message.citations);
     console.log('  - Citations count:', message.citations?.length || 0);
     if (message.citations && message.citations.length > 0) {
@@ -653,7 +653,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
             </ReactMarkdown>
           )}
           {isStreaming && (
-            <span className="cursor-blink">â–‹</span>
+            <span className="cursor-blink">▋</span>
           )}
         </Box>
         {!isUser && !isStreaming && message.citations && (
@@ -1062,7 +1062,7 @@ const ChatUI = React.forwardRef(({
         // Attach citations to the assistant message
         if (citations.length > 0) {
           if (config.debug) {
-            console.log('âœ… Attaching', citations.length, 'citations to assistant message');
+            console.log('✅ Attaching', citations.length, 'citations to assistant message');
           }
           setCurrentSessionMessages(prevMessages => {
             const lastMessage = prevMessages[prevMessages.length - 1];
@@ -1073,20 +1073,20 @@ const ChatUI = React.forwardRef(({
                   : msg
               );
               if (config.debug) {
-                console.log('âœ… Updated last message with citations');
+                console.log('✅ Updated last message with citations');
                 console.log('Last message now has citations:', updated[updated.length - 1].citations);
               }
               return updated;
             } else {
               if (config.debug) {
-                console.log('âš ï¸ Last message is not an assistant message, cannot attach citations');
+                console.log('⚠️ Last message is not an assistant message, cannot attach citations');
               }
             }
             return prevMessages;
           });
         } else {
           if (config.debug) {
-            console.log('âš ï¸ No citations to attach - citations array is empty');
+            console.log('⚠️ No citations to attach - citations array is empty');
           }
         }
   
@@ -1153,9 +1153,9 @@ const ChatUI = React.forwardRef(({
 
         const dynPayload = {
           sessionID: chatSessionId,
-          userID: attributes.email,
+          userID: 'local-user',
           question: input,
-          response: chatType === 'RAG' ? result.body : streamedResponse,
+          response: chatType === 'RAG' ? (result.completion || streamedResponse || '') : streamedResponse,
           inputTokens: inputTokens,
           outputTokens: outputTokens,
           modelId: modelId,
@@ -1165,7 +1165,7 @@ const ChatUI = React.forwardRef(({
           timestamp: savedTimestamp
         };
 
-        await convHistory.saveConversation(dynPayload, credentials);
+        await convHistory.saveConversation(dynPayload);
 
         // Update the assistant message with the actual saved timestamp
         setCurrentSessionMessages(prevMessages => {
@@ -1178,7 +1178,7 @@ const ChatUI = React.forwardRef(({
           });
         });
 
-        const historyResponse = await convHistory.loadUserHistory(attributes.email, credentials);
+        const historyResponse = await convHistory.loadUserHistory('local-user');
         setConversationHistory(historyResponse);
       } catch (error) {
         if (config.debug) {
@@ -1496,6 +1496,7 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
+
 
 
 
