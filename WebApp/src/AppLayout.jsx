@@ -48,42 +48,39 @@ function Layout() {
   const credentials = null;
   const [navigationOpen, setNavigationOpen] = useState(true);
   const [topNavModels, setTopNavModels] = useState([
-    {
-      id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      text: 'Claude 3.5 Sonnet'
-    },
-    {
-      id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-      text: 'Claude Sonnet 4.5'
-    },
-    {
-      id: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
-      text: 'Claude 3.7 Sonnet'
-    }
-  ]);
+  {
+    id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    text: 'Claude Sonnet 4.5'
+  },
+  {
+    id: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
+    text: 'Claude 3.7 Sonnet'
+  },
+  {
+    id: 'amazon.nova-pro-v1:0',
+    text: 'Amazon Nova Pro'
+  }
+]);
   const [foundationModels, setFoundationModels] = useState([
-    {
-      modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-      modelName: 'Claude 3.5 Sonnet',
-      responseStreamingSupported: true
-    },
-    {
-      modelId: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-      modelName: 'Claude Sonnet 4.5',
-      responseStreamingSupported: true
-    },
-    {
-      modelId: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
-      modelName: 'Claude 3.7 Sonnet',
-      responseStreamingSupported: true
-    }
-  ]);
-  const [chatTypes, setChatTypes] = useState([
-    { id: 'RAG', text: 'RAG' },
-    { id: 'LLM', text: 'LLM' }
-  ]);
-  const [chatType, setChatType] = useState(bedrockConfig.defaultChatType);
-  const [modelId, setModelId] = useState(null);
+  {
+    modelId: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    modelName: 'Claude Sonnet 4.5',
+    responseStreamingSupported: true
+  },
+  {
+    modelId: 'anthropic.claude-3-7-sonnet-20250219-v1:0',
+    modelName: 'Claude 3.7 Sonnet',
+    responseStreamingSupported: true
+  },
+  {
+    modelId: 'amazon.nova-pro-v1:0',
+    modelName: 'Amazon Nova Pro',
+    responseStreamingSupported: true
+  }
+]);
+  const [chatTypes, setChatTypes] = useState([{ id: 'RAG', text: 'RAG' }]);
+  const [chatType, setChatType] = useState('RAG');
+  const [modelId, setModelId] = useState('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
   const [conversationHistory, setConversationHistory] = useState([]);
   const [mode, setMode] = useState("Dark");
   const [personaRefreshTrigger, setPersonaRefreshTrigger] = useState(0);
@@ -641,6 +638,7 @@ function moonIcon() {
 }
 
 export default Layout;
+
 
 
 
