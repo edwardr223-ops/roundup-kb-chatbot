@@ -1313,9 +1313,9 @@ const ChatUI = React.forwardRef(({
       overflow: 'hidden',
       position: 'relative'
     }}>
-      <div className="chat-ui-content-wrapper">
-          <SpaceBetween size="s">
-            <Container>
+      <Container>
+        <div className="chat-ui-content-wrapper">
+          <SpaceBetween size="xs">
             <Header
               variant="h1"
               description={chatType === 'RAG' 
@@ -1450,52 +1450,7 @@ const ChatUI = React.forwardRef(({
             </div>
 
             {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
-            </Container>
-
-            <Container fitHeight>
-            </Container>
-
-            <Container fitHeight>
-
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight> 
-            </Container>
-
-            <Container fitHeight><div className="chat-ui-scroll-container" ref={chatContainerRef}>
+            <div className="chat-ui-scroll-container" ref={chatContainerRef}>
               <div className="chat-container">
                 <div className="chat-messages-wrapper">
                   {currentSessionMessages.map((message, index) => (
@@ -1538,9 +1493,9 @@ const ChatUI = React.forwardRef(({
                 />
               </div>
             </div>
-                      </Container>
           </SpaceBetween>
         </div>
+      </Container>
     </div>
   );
 });
@@ -1548,7 +1503,6 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
-
 
 
 
