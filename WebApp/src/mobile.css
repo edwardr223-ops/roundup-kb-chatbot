@@ -45,3 +45,11 @@
     padding: 6px !important;
   }
 }
+
+  .awsui-textarea,
+  .awsui-input,
+  .awsui-prompt-input textarea,
+  .awsui-prompt-input input {
+    font-size: 16px !important;
+  }
+
