@@ -1,11 +1,3 @@
-html,
-body,
-input,
-textarea,
-select {
-  font-size: 16px !important;
-}
-
 @media (max-width: 768px) {
   html {
     -webkit-text-size-adjust: 100%;
@@ -13,13 +5,7 @@ select {
 
   textarea,
   input,
-  select,
-  .awsui-textarea,
-  .awsui-input,
-  .awsui-prompt-input textarea,
-  .awsui-prompt-input input,
-  [class*="prompt-input"] textarea,
-  [class*="prompt-input"] input {
+  select {
     font-size: 16px !important;
   }
 
@@ -59,3 +45,11 @@ select {
     padding: 6px !important;
   }
 }
+
+  .awsui-textarea,
+  .awsui-input,
+  .awsui-prompt-input textarea,
+  .awsui-prompt-input input {
+    font-size: 16px !important;
+  }
+
