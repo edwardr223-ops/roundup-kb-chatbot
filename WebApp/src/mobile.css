@@ -59,3 +59,28 @@ select {
     padding: 6px !important;
   }
 }
+
+@media (max-width: 768px) {
+  textarea,
+  input,
+  select {
+    font-size: 16px !important;
+  }
+
+  textarea::placeholder,
+  input::placeholder {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 768px) {
+
+  /* Force Cloudscape textarea/input to 16px to prevent iOS zoom */
+  .awsui-textarea textarea,
+  .awsui-input input,
+  textarea,
+  input {
+    font-size: 16px !important;
+  }
+
+}
