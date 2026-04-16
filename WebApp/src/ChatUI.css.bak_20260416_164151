@@ -379,16 +379,3 @@
     max-width: 150px;
   }
 }
-
-/* Fix hamburger overlap with AI Transcript Assistant card */
-.awsui-app-layout__navigation-toggle {
-  top: 72px !important;   /* pushes it below header bar */
-  left: 12px !important;  /* small spacing from edge */
-  z-index: 1001 !important;
-}
-
-/* Optional: add slight left padding to content when collapsed */
-.awsui-app-layout__content {
-  padding-left: 8px;
-}
-
