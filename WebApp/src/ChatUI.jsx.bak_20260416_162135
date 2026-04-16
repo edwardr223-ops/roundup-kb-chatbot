@@ -1445,27 +1445,25 @@ const ChatUI = React.forwardRef(({
           </Container>
 
           <Container fitHeight>
-            {(currentSessionMessages.length > 0 || isLoading) && (
-              <div className="chat-ui-scroll-container" ref={chatContainerRef}>
-                <div className="chat-container">
-                  <div className="chat-messages-wrapper">
-                    {currentSessionMessages.map((message, index) => (
-                      <ChatMessage
-                        key={`${index}-${message.timestamp}`}
-                        message={message}
-                        username={username}
-                        userInitials={userInitials}
-                        userEmail={userEmail}
-                        credentials={credentials}
-                        sessionId={chatSessionId}
-                        modelId={modelId}
-                      />
-                    ))}
-                    {isLoading && <LoadingBubble />}
-                  </div>
+            <div className="chat-ui-scroll-container" ref={chatContainerRef}>
+              <div className="chat-container">
+                <div className="chat-messages-wrapper">
+                  {currentSessionMessages.map((message, index) => (
+                    <ChatMessage
+                      key={`${index}-${message.timestamp}`}
+                      message={message}
+                      username={username}
+                      userInitials={userInitials}
+                      userEmail={userEmail}
+                      credentials={credentials}
+                      sessionId={chatSessionId}
+                      modelId={modelId}
+                    />
+                  ))}
+                  {isLoading && <LoadingBubble />}
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="prompt-container" style={{
               left: `calc(50% + ${navigationOpen && !isMobile ? 150 : 0}px)`,
@@ -1498,7 +1496,6 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
-
 
 
 
