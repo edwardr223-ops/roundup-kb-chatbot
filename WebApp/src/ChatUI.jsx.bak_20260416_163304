@@ -1443,8 +1443,9 @@ const ChatUI = React.forwardRef(({
               {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
             </div>
           </Container>
-          {(currentSessionMessages.length > 0 || isLoading) && (
-            <Container fitHeight>
+
+          <Container fitHeight>
+            {(currentSessionMessages.length > 0 || isLoading) && (
               <div className="chat-ui-scroll-container" ref={chatContainerRef}>
                 <div className="chat-container">
                   <div className="chat-messages-wrapper">
@@ -1464,32 +1465,8 @@ const ChatUI = React.forwardRef(({
                   </div>
                 </div>
               </div>
+            )}
 
-              <div className="prompt-container" style={{
-                left: `calc(50% + ${navigationOpen && !isMobile ? 150 : 0}px)`,
-              }}>
-                <div className="prompt-wrapper">
-                  <PromptInput
-                    onChange={({ detail }) => setInput(detail.value)}
-                    value={input}
-                    actionButtonAriaLabel="Send message"
-                    actionButtonIconName="send"
-                    onAction={handleSubmit}
-                    disableSecondaryActionsPaddings
-                    placeholder="Ask a question"
-                    secondaryActions={secondaryActions}
-                    secondaryContent={secondaryContent}
-                    ariaLabel="Chat input"
-                    expandToViewport={isMobile}
-                    expandableGroups={isMobile}
-                    size={isMobile ? "large" : "normal"}
-                  />
-                </div>
-              </div>
-            </Container>
-          )}
-
-          {!(currentSessionMessages.length > 0 || isLoading) && (
             <div className="prompt-container" style={{
               left: `calc(50% + ${navigationOpen && !isMobile ? 150 : 0}px)`,
             }}>
@@ -1511,7 +1488,7 @@ const ChatUI = React.forwardRef(({
                 />
               </div>
             </div>
-          )}
+          </Container>
         </SpaceBetween>
       </div>
     </div>
@@ -1521,7 +1498,6 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
-
 
 
 
