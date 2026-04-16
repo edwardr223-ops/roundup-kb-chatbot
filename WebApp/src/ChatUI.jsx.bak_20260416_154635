@@ -1314,138 +1314,188 @@ const ChatUI = React.forwardRef(({
       position: 'relative'
     }}>
       <div className="chat-ui-content-wrapper">
-        <SpaceBetween size="s">
-          <Container>
-            <div>
-              <Header
-                variant="h1"
-                description={chatType === 'RAG' 
-                  ? 'Ask me questions about Roundup trial transcrips, depositions, hearings or pleadings.' 
-                  : chatType === 'Agentic'
-                  ? 'Ask me anything and I also have the ability to send emails and search the web.'
-                  : 'Ask me anything.'}
-                actions={
-                  <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
-                    {isMobile ? (
-                      <>
-                        <Popover
-                          dismissButton={false}
-                          triggerType="custom"
-                          content={
-                            <div style={{ minWidth: '250px' }}>
-                              
-                            </div>
-                          }
-                        >
-                          <div style={{ position: 'relative' }}>
-                            <Button
-                              iconName="settings"
-                              variant="icon"
-                              ariaLabel={`Chat type: ${chatTypeOptions.find(type => type.value === chatType)?.label || 'Select'}`}
+          <SpaceBetween size="s">
+            <Container>
+            <Header
+              variant="h1"
+              description={chatType === 'RAG' 
+                ? 'Ask me questions about Roundup trial transcrips, depositions, hearings or pleadings.' 
+                : chatType === 'Agentic'
+                ? 'Ask me anything and I also have the ability to send emails and search the web.'
+                : 'Ask me anything.'}
+              actions={
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
+                  {isMobile ? (
+                    <>
+                      <Popover
+                        dismissButton={false}
+                        triggerType="custom"
+                        content={
+                          <div style={{ minWidth: '250px' }}>
+                            
+                          </div>
+                        }
+                      >
+                        <div style={{ position: 'relative' }}>
+                          <Button
+                            iconName="settings"
+                            variant="icon"
+                            ariaLabel={`Chat type: ${chatTypeOptions.find(type => type.value === chatType)?.label || 'Select'}`}
+                          />
+                        </div>
+                      </Popover>
+                      <Popover
+                        dismissButton={false}
+                        triggerType="custom"
+                        content={
+                          <div style={{ minWidth: '250px' }}>
+                            <Select
+                              selectedOption={modelOptions.find(model => model.value === modelId) || null}
+                              onChange={({ detail }) => {
+                                setModelId(detail.selectedOption.value);
+                                if(config.debug) {
+                                  console.log('Model successfully changed to:', detail.selectedOption.value);
+                                }
+                              }}
+                              options={modelOptions}
+                              placeholder="Select a model"
+                              expandToViewport
+                              filteringType="auto"
                             />
                           </div>
-                        </Popover>
-                        <Popover
-                          dismissButton={false}
-                          triggerType="custom"
-                          content={
-                            <div style={{ minWidth: '250px' }}>
-                              <Select
-                                selectedOption={modelOptions.find(model => model.value === modelId) || null}
-                                onChange={({ detail }) => {
-                                  setModelId(detail.selectedOption.value);
-                                  if(config.debug) {
-                                    console.log('Model successfully changed to:', detail.selectedOption.value);
-                                  }
-                                }}
-                                options={modelOptions}
-                                placeholder="Select a model"
-                                expandToViewport
-                                filteringType="auto"
-                              />
-                            </div>
-                          }
-                        >
-                          <div style={{ position: 'relative' }}>
-                            <Button
-                              iconName="gen-ai"
-                              variant="icon"
-                              ariaLabel={`Model: ${modelOptions.find(model => model.value === modelId)?.label || 'Select'}`}
-                            />
-                          </div>
-                        </Popover>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ width: '220px', minWidth: '220px', maxWidth: '220px' }}>
-                          <Select
-                            selectedOption={modelOptions.find(model => model.value === modelId) || null}
-                            onChange={({ detail }) => {
-                              setModelId(detail.selectedOption.value);
-                              if(config.debug) {
-                                console.log('Model successfully changed to:', detail.selectedOption.value);
-                              }
-                            }}
-                            options={modelOptions}
-                            placeholder="Select a model"
-                            expandToViewport
-                            filteringType="auto"
+                        }
+                      >
+                        <div style={{ position: 'relative' }}>
+                          <Button
+                            iconName="gen-ai"
+                            variant="icon"
+                            ariaLabel={`Model: ${modelOptions.find(model => model.value === modelId)?.label || 'Select'}`}
                           />
                         </div>
+                      </Popover>
+        
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
+                        
+                      </div>
+                      <div style={{ width: '200px', minWidth: '200px', maxWidth: '200px' }}>
+                        <Select
+                          selectedOption={modelOptions.find(model => model.value === modelId) || null}
+                          onChange={({ detail }) => {
+                            setModelId(detail.selectedOption.value);
+                            if(config.debug) {
+                              console.log('Model successfully changed to:', detail.selectedOption.value);
+                            }
+                          }}
+                          options={modelOptions}
+                          placeholder="Select a model"
+                          expandToViewport
+                          filteringType="auto"
+                        />
+                      </div>
+                    
+                    </>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setCurrentSessionMessages([]);
+                      setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                      setInput('');
+                      setFiles([]);
+                      setSelectedPersonaId('default');
+                    }}
+                    iconName="refresh"
+                    variant={isMobile ? "icon" : undefined}
+                    ariaLabel={isMobile ? "New Chat" : undefined}
+                  >
+                    {isMobile ? "" : "New Chat"}
+                  </Button>
+                </div>
+              }
+            >
+              AI Transcipt Assistant
+                        </Header>
 
-                        <div style={{ width: '140px', minWidth: '140px', maxWidth: '140px' }}>
-                          <Select
-                            selectedOption={{ label: 'Trials', value: 'trials' }}
-                            options={[
-                              { label: 'Trials', value: 'trials' },
-                              { label: 'Depositions', value: 'depositions' },
-                              { label: 'Pleadings', value: 'pleadings' },
-                              { label: 'Hearings', value: 'hearings' }
-                            ]}
-                            placeholder="Type"
-                            expandToViewport
-                          />
-                        </div>
+            <div className="chat-filters-row">
+              <div className="chat-filter-group">
+                <label className="chat-filter-label">Type</label>
+                <Select
+                  selectedOption={{ label: 'Trials', value: 'trials' }}
+                  options={[
+                    { label: 'Trials', value: 'trials' },
+                    { label: 'Depositions', value: 'depositions' },
+                    { label: 'Pleadings', value: 'pleadings' },
+                    { label: 'Hearings', value: 'hearings' }
+                  ]}
+                  placeholder="Select type"
+                  expandToViewport
+                />
+              </div>
 
-                        <div style={{ width: '270px', minWidth: '270px', maxWidth: '270px' }}>
-                          <Select
-                            selectedOption={{ label: 'Dennis v. Monsanto (CLH-CA)', value: 'dennis' }}
-                            options={[
-                              { label: 'Dennis v. Monsanto (CLH-CA)', value: 'dennis' },
-                              { label: 'Barnes v. Monsanto (Itkin-GA)', value: 'barnes' },
-                              { label: 'McKivison v. Monsanto (Itkin-PA)', value: 'mckivison' }
-                            ]}
-                            placeholder="Sub-Type"
-                            expandToViewport
-                          />
-                        </div>
-                      </>
-                    )}
-                    <Button
-                      onClick={() => {
-                        setCurrentSessionMessages([]);
-                        setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
-                        setInput('');
-                        setFiles([]);
-                        setSelectedPersonaId('default');
-                      }}
-                      iconName="refresh"
-                      variant={isMobile ? "icon" : undefined}
-                      ariaLabel={isMobile ? "New Chat" : undefined}
-                    >
-                      {isMobile ? "" : "New Chat"}
-                    </Button>
-                  </div>
-                }
-              >
-                AI Transcipt Assistant
-              </Header>
-              {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
+              <div className="chat-filter-group">
+                <label className="chat-filter-label">Sub-Type</label>
+                <Select
+                  selectedOption={{ label: 'Dennis v. Monsanto (CLH-CA)', value: 'dennis' }}
+                  options={[
+                    { label: 'Dennis v. Monsanto (CLH-CA)', value: 'dennis' },
+                    { label: 'Barnes v. Monsanto (Itkin-GA)', value: 'barnes' },
+                    { label: 'McKivison v. Monsanto (Itkin-PA)', value: 'mckivison' }
+                  ]}
+                  placeholder="Select sub-type"
+                  expandToViewport
+                />
+              </div>
             </div>
-          </Container>
 
-          <Container fitHeight>
-            <div className="chat-ui-scroll-container" ref={chatContainerRef}>
+            {ragEnabled && chatType === 'RAG' && <KbStatusBanner />}
+            </Container>
+
+            <Container fitHeight>
+            </Container>
+
+            <Container fitHeight>
+
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight> 
+            </Container>
+
+            <Container fitHeight><div className="chat-ui-scroll-container" ref={chatContainerRef}>
               <div className="chat-container">
                 <div className="chat-messages-wrapper">
                   {currentSessionMessages.map((message, index) => (
@@ -1463,8 +1513,10 @@ const ChatUI = React.forwardRef(({
                   {isLoading && <LoadingBubble />}
                 </div>
               </div>
+              
             </div>
-
+            
+            {/* Prompt positioned outside the scroll container */}
             <div className="prompt-container" style={{
               left: `calc(50% + ${navigationOpen && !isMobile ? 150 : 0}px)`,
             }}>
@@ -1480,15 +1532,15 @@ const ChatUI = React.forwardRef(({
                   secondaryActions={secondaryActions}
                   secondaryContent={secondaryContent}
                   ariaLabel="Chat input"
-                  expandToViewport={isMobile}
-                  expandableGroups={isMobile}
-                  size={isMobile ? "large" : "normal"}
+                  expandToViewport={isMobile} // Expand to viewport on mobile
+                  expandableGroups={isMobile} // Make groups expandable on mobile
+                  size={isMobile ? "large" : "normal"} // Larger prompt on mobile
                 />
               </div>
             </div>
-          </Container>
-        </SpaceBetween>
-      </div>
+                      </Container>
+          </SpaceBetween>
+        </div>
     </div>
   );
 });
@@ -1496,7 +1548,6 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
-
 
 
 
