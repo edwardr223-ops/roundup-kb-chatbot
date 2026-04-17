@@ -708,6 +708,7 @@ const ChatUI = React.forwardRef(({
   const [selectedPersonaId, setSelectedPersonaId] = useState('default');
   const [personas, setPersonas] = useState([]);
   const [userEmail, setUserEmail] = useState('');
+  const [selectedKbModel, setSelectedKbModel] = useState('sonnet46');
 
   // Refs and Context
   const chatContainerRef = useRef(null);
@@ -730,6 +731,15 @@ const ChatUI = React.forwardRef(({
       value: type.id
     }));
   }, [chatTypes, ragEnabled]);
+
+  const kbModelOptions = useMemo(() => {
+  return [
+    { label: 'Sonnet 4.6', value: 'sonnet46' },
+    { label: 'Opus 4.5', value: 'opus45' },
+    { label: 'Nova Pro', value: 'novapro' },
+    { label: 'Haiku', value: 'haiku' }
+  ];
+  }, []);
 
   // Handle window resize to detect mobile devices
   useEffect(() => {
@@ -1377,21 +1387,32 @@ const ChatUI = React.forwardRef(({
                       </>
                     ) : (
                       <>
-                        <div style={{ width: '220px', minWidth: '220px', maxWidth: '220px' }}>
-                          <Select
-                            selectedOption={modelOptions.find(model => model.value === modelId) || null}
-                            onChange={({ detail }) => {
+                      <div style={{ width: '220px', minWidth: '220px', maxWidth: '220px' }}>
+                        <Select
+                          selectedOption={
+                            chatType === 'RAG'
+                              ? kbModelOptions.find(option => option.value === selectedKbModel) || null
+                              : modelOptions.find(model => model.value === modelId) || null
+                          }
+                          onChange={({ detail }) => {
+                            if (chatType === 'RAG') {
+                              setSelectedKbModel(detail.selectedOption.value);
+                              if (config.debug) {
+                                console.log('KB model successfully changed to:', detail.selectedOption.value);
+                              }
+                            } else {
                               setModelId(detail.selectedOption.value);
-                              if(config.debug) {
+                              if (config.debug) {
                                 console.log('Model successfully changed to:', detail.selectedOption.value);
                               }
-                            }}
-                            options={modelOptions}
-                            placeholder="Select a model"
-                            expandToViewport
-                            filteringType="auto"
-                          />
-                        </div>
+                            }
+                          }}
+                          options={chatType === 'RAG' ? kbModelOptions : modelOptions}
+                          placeholder={chatType === 'RAG' ? 'KB Model' : 'Select a model'}
+                          expandToViewport
+                          filteringType="auto"
+                        />
+                      </div>
 
                         <div style={{ width: '140px', minWidth: '140px', maxWidth: '140px' }}>
                           <Select
