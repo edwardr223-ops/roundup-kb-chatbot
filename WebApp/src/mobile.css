@@ -108,3 +108,15 @@ select {
   }
 
 }
+
+@media (max-width: 768px) {
+
+  /* Force Cloudscape textarea/input to 16px to prevent iOS zoom */
+  .awsui-textarea textarea,
+  .awsui-input input,
+  textarea,
+  input {
+    font-size: 16px !important;
+  }
+
+}
