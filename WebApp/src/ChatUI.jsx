@@ -1409,7 +1409,7 @@ const ChatUI = React.forwardRef(({
 
                         <div style={{ width: '270px', minWidth: '270px', maxWidth: '270px' }}>
                           <Select
-                            selectedOption={{ label: 'Dennis v. Monsanto (CLH-CA)', value: 'dennis' }}
+                            selectedOption={{ label: 'Dennis v. Monsanto (CLH-CA)', value: 'Dennis v. Monsanto' }}
                             options={[
                               { label: 'Dennis v. Monsanto (CLH-CA)', value: 'Dennis v. Monsanto' },
                               { label: 'Barnes v. Monsanto (Itkin-GA)', value: 'Barnes v. Monsanto' },
