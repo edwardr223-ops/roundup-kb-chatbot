@@ -1,4 +1,3 @@
-
 import {
   BedrockAgentRuntimeClient,
   InvokeAgentCommand,
@@ -69,21 +68,18 @@ export const getBedrockKBStream = async (prompt, sessionId, modelArn) => {
     region: bedrockConfig.region,
     ...(vpceEndpoints.bedrockAgentRuntime && { endpoint: vpceEndpoints.bedrockAgentRuntime })
   });
-  const input = { // RetrieveAndGenerateStreamRequest
+  const input = {
     sessionId: sessionId,
-    input: { // RetrieveAndGenerateInput
-      text: prompt, // required
+    input: {
+      text: prompt,
     },
-    retrieveAndGenerateConfiguration: { // RetrieveAndGenerateConfiguration
-      type: "KNOWLEDGE_BASE", // required
-      knowledgeBaseConfiguration: { // KnowledgeBaseRetrieveAndGenerateConfiguration
-        knowledgeBaseId: bedrockConfig.knowledgeBaseId, // required
-        modelArn: modelArn, // required
+    retrieveAndGenerateConfiguration: {
+      type: "KNOWLEDGE_BASE",
+      knowledgeBaseConfiguration: {
+        knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+        modelArn: modelArn,
       },
     },
-    // sessionConfiguration: { // RetrieveAndGenerateSessionConfiguration
-    //   kmsKeyArn: "STRING_VALUE", // required
-    // },
   };
   const command = new RetrieveAndGenerateStreamCommand(input);
   const response = await client.send(command);
@@ -132,8 +128,8 @@ export const doesModelSupportStreaming = async (modelId, credentials) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrock && { endpoint: vpceEndpoints.bedrock })
   });
-  const input = { // GetFoundationModelRequest
-    modelIdentifier: modelId, // required
+  const input = {
+    modelIdentifier: modelId,
   };
   const command = new GetFoundationModelCommand(input);
   try {
@@ -150,12 +146,24 @@ export const doesModelSupportStreaming = async (modelId, credentials) => {
   }
 }
 
-export const invokeBedrockAgent = async (prompt, sessionId, credentials, onChunk = null) => {
+export const invokeBedrockAgent = async (
+  prompt,
+  sessionId,
+  credentials,
+  onChunk = null,
+  options = {}
+) => {
   const apiUrl = import.meta.env.VITE_CHAT_API_URL;
 
   if (!apiUrl) {
     throw new Error('VITE_CHAT_API_URL is not configured');
   }
+
+  const {
+    modelKey = null,
+    caseId = null,
+    documentType = null
+  } = options;
 
   try {
     const response = await fetch(apiUrl, {
@@ -165,7 +173,10 @@ export const invokeBedrockAgent = async (prompt, sessionId, credentials, onChunk
       },
       body: JSON.stringify({
         message: prompt,
-        sessionId: sessionId || null
+        sessionId: sessionId || null,
+        modelKey: modelKey,
+        case_id: caseId,
+        document_type: documentType
       })
     });
 
@@ -184,7 +195,8 @@ export const invokeBedrockAgent = async (prompt, sessionId, credentials, onChunk
     return {
       sessionId: result.sessionId || sessionId,
       completion: answer,
-      citations: result.citations || []
+      citations: result.citations || [],
+      modelKey: result.modelKey || modelKey
     };
   } catch (err) {
     console.error('Invoke Bedrock agent error:', sanitizeForLog(err.message));
@@ -192,12 +204,27 @@ export const invokeBedrockAgent = async (prompt, sessionId, credentials, onChunk
   }
 };
 
-export const invokeBedrockRetrieveAndGenerateStreamCommand = async (prompt, files, sessionId, credentials, modelId, conversationHistory = [], onChunk) => {
+export const invokeBedrockRetrieveAndGenerateStreamCommand = async (
+  prompt,
+  files,
+  sessionId,
+  credentials,
+  modelId,
+  conversationHistory = [],
+  onChunk,
+  options = {}
+) => {
   const apiUrl = import.meta.env.VITE_CHAT_API_URL;
 
   if (!apiUrl) {
     throw new Error('VITE_CHAT_API_URL is not configured');
   }
+
+  const {
+    modelKey = null,
+    caseId = null,
+    documentType = null
+  } = options;
 
   try {
     const response = await fetch(apiUrl, {
@@ -207,7 +234,10 @@ export const invokeBedrockRetrieveAndGenerateStreamCommand = async (prompt, file
       },
       body: JSON.stringify({
         message: prompt,
-        sessionId: sessionId || null
+        sessionId: sessionId || null,
+        modelKey: modelKey,
+        case_id: caseId,
+        document_type: documentType
       })
     });
 
@@ -226,6 +256,7 @@ export const invokeBedrockRetrieveAndGenerateStreamCommand = async (prompt, file
     return {
       sessionId: result.sessionId || sessionId,
       citations: result.citations || [],
+      modelKey: result.modelKey || modelKey,
       fullResponse: {
         metrics: {
           inputTokenCount: 0,
@@ -251,15 +282,12 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
     ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
   });
 
-  // Validate and format Chat History
   const formattedHistory = conversationHistory
     .filter(msg => msg && msg.role && msg.content)
     .map(msg => ({ role: msg.role, content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }] }));
 
-  // Create new messages array starting with validated history
   const messages = [...formattedHistory];
 
-  // Add the new message with files or just text
   if (files && files.length > 0) {
     const content = [];
     for (const file of files) {
@@ -287,7 +315,6 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
   }
 
   try {
-    // Log messages for debugging
     if (config.debug) {
       console.log('Sending messages to Bedrock:', JSON.stringify(messages, null, 2));
     }
@@ -295,10 +322,8 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
     const command = new ConverseCommand({ modelId, messages });
     const response = await bedrockClient.send(command);
 
-    // Extract the response data
     const { output, stopReason, usage, metrics, additionalModelResponseFields, trace } = response;
 
-    // Process the response
     let responseText = '';
     if (output && output.message) {
       for (const content of output.message.content) {
@@ -308,7 +333,6 @@ export const invokeBedrockConverseCommand = async (prompt, files, credentials, m
       }
     }
 
-    // Add the complete messages to the Chat History
     const validCompleteMessages = [
       ...formattedHistory,
       { role: 'user', content: messages.find(m => m.role === 'user').content },
@@ -344,18 +368,15 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
     ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
   });
 
-  // Validate and format Chat History
   const formattedHistory = conversationHistory
-    .filter(msg => msg && msg.role && msg.content) // Filter out invalid messages
+    .filter(msg => msg && msg.role && msg.content)
     .map(msg => ({
       role: msg.role,
       content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }]
     }));
 
-  // Create new messages array starting with validated history
   const messages = [...formattedHistory];
 
-  // Add the new message with files or just text
   if (files && files.length > 0) {
     const content = [];
 
@@ -407,7 +428,6 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
   }
 
   try {
-    // Log messages for debugging
     if (config.debug) {
       console.log('Sending messages to Bedrock:', JSON.stringify(messages, null, 2));
     }
@@ -418,9 +438,9 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
         role: msg.role,
         content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }]
       })),
-      guardrailConfig: bedrockConfig.useGuardrail ? { // GuardrailStreamConfiguration
-        guardrailIdentifier: bedrockConfig.guardrailId, // from aws-config.js
-        guardrailVersion: bedrockConfig.guardrailVersion, // from aws-config.js
+      guardrailConfig: bedrockConfig.useGuardrail ? {
+        guardrailIdentifier: bedrockConfig.guardrailId,
+        guardrailVersion: bedrockConfig.guardrailVersion,
         trace: "enabled",
         streamProcessingMode: "sync",
       } : undefined,
@@ -430,10 +450,9 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
     let responseText = '';
     let completeMessages = [];
     let currentMessage = null;
-    let usageInfo = null;  // Add this line
+    let usageInfo = null;
 
     for await (const event of response.stream) {
-      // Handle message start
       if (event.messageStart) {
         currentMessage = {
           role: event.messageStart.role,
@@ -441,9 +460,6 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
         };
       }
       
-      //console.log("event: ")
-      //console.log(event)
-      // Handle content block delta (actual content)
       if (event.contentBlockDelta && event.contentBlockDelta.delta.text) {
         const chunkText = event.contentBlockDelta.delta.text;
         responseText += chunkText;
@@ -453,21 +469,15 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
         }
       }
 
-      // Extract usage information if available
       if (event.metadata && event.metadata.usage) {
         usageInfo = event.metadata.usage;
-        //console.log("UsageInfo from metadata:", usageInfo);
       } else if (event.metrics && event.metrics.inputTokenCount) {
         usageInfo = {
           inputTokens: event.metrics.inputTokenCount || 0,
           outputTokens: event.metrics.outputTokenCount || 0
         };
-        //console.log("UsageInfo from metrics:", usageInfo);
       }
 
-
-
-      // Handle message stop
       if (event.messageStop) {
         if (currentMessage) {
           currentMessage.content = [{ text: responseText }];
@@ -476,10 +486,8 @@ export const invokeBedrockConverseStreamCommand = async (prompt, files, credenti
       }
     }
 
-    // Add the complete messages to the Chat History
     const validCompleteMessages = completeMessages.filter(msg => msg && msg.role && msg.content);
     messages.push(...validCompleteMessages);
-
 
     return { 
       body: responseText,
@@ -507,7 +515,6 @@ export const invokeBedrock = async (prompt, sessionId, credentials, modelId) => 
     let requestBody;
     const modelId = parameters.modelId || "anthropic.claude-v2";
 
-    // Format request body based on model
     if (modelId.includes('claude-3')) {
       requestBody = {
         messages: [
@@ -563,7 +570,6 @@ export const invokeBedrock = async (prompt, sessionId, credentials, modelId) => 
       console.log('Raw Bedrock Response:', JSON.stringify(responseBody, null, 2));
     }
     
-    // Handle different response formats
     let completion;
     if (modelId.includes('claude-3')) {
       completion = responseBody.messages?.[0]?.content?.[0]?.text || 
@@ -579,12 +585,10 @@ export const invokeBedrock = async (prompt, sessionId, credentials, modelId) => 
       completion = responseBody;
     }
     
-    // If completion is a string, wrap it in an object
     if (typeof completion === 'string') {
       return { body: completion };
     }
     
-    // If we already have an object, return it as is
     return completion;
     
   } catch (error) {
@@ -600,7 +604,6 @@ export const addWebsiteToCrawl = async (websiteUrl, inclusionFilters, exclusionF
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
   
-  // Create a data source configuration for web crawling
   const dataSourceConfiguration = {
     type: "WEB",
     webConfiguration: {
@@ -617,19 +620,17 @@ export const addWebsiteToCrawl = async (websiteUrl, inclusionFilters, exclusionF
           maxPages: maxPages || 100
         },
         inclusionFilters: inclusionFilters || [".*"],
-        exclusionFilters: exclusionFilters || [".*\\.pdf"], // Default exclusion filter
+        exclusionFilters: exclusionFilters || [".*\\.pdf"],
         scope: scope || "SUBDOMAINS"
       }
     }
   };
   
-  // Create a sanitized name from the website URL that matches the required pattern ([0-9a-zA-Z][_-]?){1,100}
   const sanitizedName = websiteUrl
     .replace(/^https?:\/\//, '')
     .replace(/[^a-zA-Z0-9]/g, '')
     .substring(0, 90);
     
-  // Create a new data source with the website configuration
   const input = {
     knowledgeBaseId: bedrockConfig.knowledgeBaseId,
     name: `Web${sanitizedName}`,
@@ -637,11 +638,9 @@ export const addWebsiteToCrawl = async (websiteUrl, inclusionFilters, exclusionF
   };
   
   try {
-    // Create the data source
     const createCommand = new CreateDataSourceCommand(input);
     const createResponse = await client.send(createCommand);
     
-    // Start an ingestion job to crawl the website
     const ingestionInput = {
       knowledgeBaseId: bedrockConfig.knowledgeBaseId,
       dataSourceId: createResponse.dataSource.dataSourceId
@@ -744,7 +743,7 @@ export const getBedrockAgent = async (credentials) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
-  const input = { // UpdateAgentRequest
+  const input = {
     agentId: bedrockConfig.agentId
   };
   const command = new GetAgentCommand(input);
@@ -780,11 +779,11 @@ export const updateBedrockAgentModel = async (credentials, modelId) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
-  const input = { // UpdateAgentRequest
-    agentId: bedrockConfig.agentId, // required
-    agentName: bedrockConfig.agentName, // required
-    foundationModel: modelId, // required
-    agentResourceRoleArn: bedrockConfig.agentResourceRoleArn, // required
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentName: bedrockConfig.agentName,
+    foundationModel: modelId,
+    agentResourceRoleArn: bedrockConfig.agentResourceRoleArn,
   };
   const command = new UpdateAgentCommand(input);
   try {
@@ -846,8 +845,8 @@ export const prepareBedrockAgent = async (credentials) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
-  const input = { // PrepareAgentRequest
-    agentId: bedrockConfig.agentId, // required
+  const input = {
+    agentId: bedrockConfig.agentId,
   };
   try {
     const command = new PrepareAgentCommand(input);
@@ -863,9 +862,9 @@ export const createBedrockAgentAlias = async (credentials) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
-  const input = { // CreateAgentAliasRequest
-    agentId: bedrockConfig.agentId, // required
-    agentAliasName: "USER_UPDATE_WILL_BE_DELETED", // required
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentAliasName: "USER_UPDATE_WILL_BE_DELETED",
   };
   try {
     const command = new CreateAgentAliasCommand(input);
@@ -882,9 +881,9 @@ export const getBedrockAgentAliasStatus = async (credentials, aliasId) => {
     credentials: credentials,
     ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
   });
-  const input = { // GetAgentAliasRequest
-    agentId: bedrockConfig.agentId, // required
-    agentAliasId: aliasId, // required
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentAliasId: aliasId,
   };
   try {
     const command = new GetAgentAliasCommand(input);
@@ -892,6 +891,4 @@ export const getBedrockAgentAliasStatus = async (credentials, aliasId) => {
   } catch(e) {
     console.error('Get Bedrock agent alias status error:', sanitizeForLog(e.message));
   }
-}  
-
-
+}
