@@ -334,8 +334,8 @@ function Layout() {
       <TopNavigation
         identity={{
           href: "#",
-          title: "Clark Love & Hutson",
-          logo: { src: logo, alt: "Amazon Web Services" }
+          title: "",
+          logo: { src: logo, alt: "CLH" }
         }}
         utilities={[
           {
