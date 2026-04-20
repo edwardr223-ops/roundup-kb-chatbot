@@ -682,7 +682,7 @@ const ChatUI = React.forwardRef(({
   const [personas, setPersonas] = useState([]);
   const [userEmail, setUserEmail] = useState('');
   const [selectedKbModel, setSelectedKbModel] = useState('sonnet46');
-  const [selectedDocType, setSelectedDocType] = useState({ label: 'Trials', value: 'trials' });
+  const [selectedDocType, setSelectedDocType] = useState({ label: 'Trials', value: 'trial_transcript' });
   const [selectedCase, setSelectedCase] = useState({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
 
   const chatContainerRef = useRef(null);
@@ -994,8 +994,11 @@ const ChatUI = React.forwardRef(({
             modelId,
             formattedHistory,
             handleStreamChunk,
-            selectedKbModel
-            
+            {
+              modelKey: selectedKbModel,
+              caseId: selectedCase?.value || null,
+              documentType: selectedDocType?.value || null
+            }
           );
   
           if (config.debug) {
@@ -1356,7 +1359,7 @@ const ChatUI = React.forwardRef(({
                             onChange={({ detail }) => setSelectedDocType(detail.selectedOption)}
                             options={[
                               { label: 'Trials', value: 'trial_transcript' },
-                              { label: 'Depositions', value: 'depositions' },
+                              { label: 'Depositions', value: 'deposition' },
                               { label: 'Pleadings', value: 'pleadings' },
                               { label: 'Hearings', value: 'hearings' }
                             ]}
