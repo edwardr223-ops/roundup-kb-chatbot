@@ -162,22 +162,28 @@ export const invokeBedrockAgent = async (
   const {
     modelKey = null,
     caseId = null,
-    documentType = null
+    documentType = null,
+    deponentName = null
   } = options;
 
   try {
+    const payload = {
+      message: prompt,
+      sessionId: sessionId || null,
+      modelKey: modelKey,
+      case_id: caseId,
+      document_type: documentType,
+      deponent_name: deponentName
+    };
+
+    console.log('Payload to Lambda:', payload);
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        message: prompt,
-        sessionId: sessionId || null,
-        modelKey: modelKey,
-        case_id: caseId,
-        document_type: documentType
-      })
+      body: JSON.stringify(payload)
     });
 
     const result = await response.json();
@@ -223,22 +229,28 @@ export const invokeBedrockRetrieveAndGenerateStreamCommand = async (
   const {
     modelKey = null,
     caseId = null,
-    documentType = null
+    documentType = null,
+    deponentName = null
   } = options;
 
   try {
+    const payload = {
+      message: prompt,
+      sessionId: sessionId || null,
+      modelKey: modelKey,
+      case_id: caseId,
+      document_type: documentType,
+      deponent_name: deponentName
+    };
+
+    console.log('Payload to Lambda:', payload);
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        message: prompt,
-        sessionId: sessionId || null,
-        modelKey: modelKey,
-        case_id: caseId,
-        document_type: documentType
-      })
+      body: JSON.stringify(payload)
     });
 
     const result = await response.json();
