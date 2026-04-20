@@ -682,47 +682,8 @@ const ChatUI = React.forwardRef(({
   const [personas, setPersonas] = useState([]);
   const [userEmail, setUserEmail] = useState('');
   const [selectedKbModel, setSelectedKbModel] = useState('sonnet46');
-
-  const docTypeOptions = useMemo(() => {
-    return [
-      { label: 'Trials', value: 'trial_transcript' },
-      { label: 'Depositions', value: 'deposition' },
-      { label: 'Pleadings', value: 'pleadings' },
-      { label: 'Hearings', value: 'hearings' }
-    ];
-  }, []);
-
-  const caseOptions = useMemo(() => {
-    return [
-      { label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' },
-      { label: 'Barnes v. Monsanto', value: 'barnes_itkin_ga' },
-      { label: 'McKivison v. Monsanto', value: 'mckivison_itkin_pa' }
-    ];
-  }, []);
-
-  const depositionOptions = useMemo(() => {
-    return [
-      { label: 'Chase, Steven', value: 'Chase, Steven' },
-      { label: 'Dennis, Mike', value: 'Dennis, Mike' },
-      { label: 'Gates Richard', value: 'Gates Richard' },
-      { label: 'Herb, Kimberly', value: 'Herb, Kimberly' },
-      { label: 'Revels, Diane', value: 'Revels, Diane' },
-      { label: 'Stone, Eric', value: 'Stone, Eric' },
-      { label: 'Wheat, Curtis', value: 'Wheat, Curtis' },
-      { label: 'Womack, Judith', value: 'Womack, Judith' }
-    ];
-  }, []);
-
   const [selectedDocType, setSelectedDocType] = useState({ label: 'Trials', value: 'trial_transcript' });
-  const [selectedSubType, setSelectedSubType] = useState({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
-
-  const subTypeOptions = useMemo(() => {
-    return selectedDocType?.value === 'deposition' ? depositionOptions : caseOptions;
-  }, [selectedDocType, depositionOptions, caseOptions]);
-
-  const subTypePlaceholder = useMemo(() => {
-    return selectedDocType?.value === 'deposition' ? 'Deponent' : 'Case';
-  }, [selectedDocType]);
+  const [selectedCase, setSelectedCase] = useState({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
 
   const chatContainerRef = useRef(null);
   const credentials = useContext(CredentialsContext);
@@ -752,14 +713,6 @@ const ChatUI = React.forwardRef(({
       { label: 'Haiku', value: 'haiku' }
     ];
   }, []);
-
-  useEffect(() => {
-    if (selectedDocType?.value === 'deposition') {
-      setSelectedSubType({ label: 'Chase, Steven', value: 'Chase, Steven' });
-    } else {
-      setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
-    }
-  }, [selectedDocType]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1029,11 +982,10 @@ const ChatUI = React.forwardRef(({
         if (supportsStreaming) {
           console.log('RAG function received KB model:', selectedKbModel);
           console.log('RAG filters:', {
-            selectedDocType,
-            selectedSubType,
-            selectedKbModel
-          });
-
+          selectedDocType,
+          selectedCase,
+          selectedKbModel
+        });
           result = await invokeBedrockRetrieveAndGenerateStreamCommand(
             enhancedInput,
             allFiles,
@@ -1044,9 +996,8 @@ const ChatUI = React.forwardRef(({
             handleStreamChunk,
             {
               modelKey: selectedKbModel,
-              caseId: selectedDocType?.value === 'deposition' ? null : (selectedSubType?.value || null),
-              documentType: selectedDocType?.value || null,
-              deponentName: selectedDocType?.value === 'deposition' ? (selectedSubType?.value || null) : null
+              caseId: selectedCase?.value || null,
+              documentType: selectedDocType?.value || null
             }
           );
   
@@ -1061,18 +1012,7 @@ const ChatUI = React.forwardRef(({
             };
           }
         } else {
-          result = await invokeBedrockAgent(
-            enhancedInput,
-            chatSessionId,
-            credentials,
-            [],
-            {
-              modelKey: selectedKbModel,
-              caseId: selectedDocType?.value === 'deposition' ? null : (selectedSubType?.value || null),
-              documentType: selectedDocType?.value || null,
-              deponentName: selectedDocType?.value === 'deposition' ? (selectedSubType?.value || null) : null
-            }
-          );
+          result = await invokeBedrockAgent(enhancedInput, chatSessionId, credentials, []);
         }
   
         setRagSessionId(result.sessionId);
@@ -1371,10 +1311,10 @@ const ChatUI = React.forwardRef(({
                               <Select
                                 selectedOption={modelOptions.find(model => model.value === modelId) || null}
                                 onChange={({ detail }) => {
-                                  if (chatType === 'RAG') {
-                                    setSelectedKbModel(detail.selectedOption.value);
-                                  }
-                                }}
+                                if (chatType === 'RAG') {
+                                  setSelectedKbModel(detail.selectedOption.value);
+                                }
+                              }}
                                 options={modelOptions}
                                 placeholder="Select a model"
                                 expandToViewport
@@ -1417,7 +1357,12 @@ const ChatUI = React.forwardRef(({
                           <Select
                             selectedOption={selectedDocType}
                             onChange={({ detail }) => setSelectedDocType(detail.selectedOption)}
-                            options={docTypeOptions}
+                            options={[
+                              { label: 'Trials', value: 'trial_transcript' },
+                              { label: 'Depositions', value: 'deposition' },
+                              { label: 'Pleadings', value: 'pleadings' },
+                              { label: 'Hearings', value: 'hearings' }
+                            ]}
                             placeholder="Type"
                             expandToViewport
                           />
@@ -1425,10 +1370,14 @@ const ChatUI = React.forwardRef(({
 
                         <div style={{ width: '270px', minWidth: '270px', maxWidth: '270px' }}>
                           <Select
-                            selectedOption={selectedSubType}
-                            onChange={({ detail }) => setSelectedSubType(detail.selectedOption)}
-                            options={subTypeOptions}
-                            placeholder={subTypePlaceholder}
+                            selectedOption={selectedCase}
+                            onChange={({ detail }) => setSelectedCase(detail.selectedOption)}
+                            options={[
+                              { label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' },
+                              { label: 'Barnes v. Monsanto', value: 'barnes_itkin_ga' },
+                              { label: 'McKivison v. Monsanto', value: 'mckivison_itkin_pa' }
+                            ]}
+                            placeholder="Sub-Type"
                             expandToViewport
                           />
                         </div>
@@ -1441,8 +1390,6 @@ const ChatUI = React.forwardRef(({
                         setInput('');
                         setFiles([]);
                         setSelectedPersonaId('default');
-                        setSelectedDocType({ label: 'Trials', value: 'trial_transcript' });
-                        setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
                       }}
                       iconName="refresh"
                       variant={isMobile ? "icon" : undefined}

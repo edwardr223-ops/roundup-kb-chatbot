@@ -1,0 +1,894 @@
+import {
+  BedrockAgentRuntimeClient,
+  InvokeAgentCommand,
+  InvokeInlineAgentCommand,
+  RetrieveAndGenerateStreamCommand
+} from "@aws-sdk/client-bedrock-agent-runtime";
+import { 
+  BedrockAgentClient,
+  StartIngestionJobCommand,
+  GetIngestionJobCommand,
+  UpdateAgentCommand,
+  GetAgentCommand,
+  GetAgentAliasCommand,
+  PrepareAgentCommand,
+  CreateAgentAliasCommand,
+  UpdateDataSourceCommand,
+  CreateDataSourceCommand
+} from "@aws-sdk/client-bedrock-agent";
+import { BedrockClient, GetFoundationModelCommand } from "@aws-sdk/client-bedrock";
+import { BedrockRuntimeClient, ConverseCommand, ConverseStreamCommand, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import { bedrockConfig, config, vpceEndpoints } from './aws-config';
+import { sanitizeForLog } from './utils/sanitize';
+
+/**
+ * @typedef {Object} ResponseBody
+ * @property {string} completion
+ */
+
+/**
+ * Invokes a Bedrock agent to run an inference using the input
+ * provided in the request body.
+ *
+ * @param {string} prompt - The prompt that you want the Agent to complete.
+ * @param {string} sessionId - An arbitrary identifier for the session.
+ */
+
+export const parameters = { 
+  modelId: null, instruction: null, modelupdated: false, instructionUpdated: false
+};
+
+export const setModel = (modelId) => {
+  parameters.modelId = modelId;
+  parameters.modelupdated = true;
+}
+
+export const setInstruction = (instruction) => {
+  parameters.instruction = instruction;
+  parameters.instructionUpdated = true;
+}
+
+export const getModel = (credentials) => {
+  if(!parameters.modelupdated) {
+    return getBedrockAgentModel(credentials);
+  }
+  return parameters.modelId;
+}
+
+export const getInstruction = async (credentials) => {
+  if(!parameters.instructionUpdated) {
+    const instruction = await getBedrockAgentInstructions(credentials);
+    return instruction;
+  }
+  return parameters.instruction;
+}
+
+export const getBedrockKBStream = async (prompt, sessionId, modelArn) => {
+  const client = new BedrockAgentRuntimeClient({
+    region: bedrockConfig.region,
+    ...(vpceEndpoints.bedrockAgentRuntime && { endpoint: vpceEndpoints.bedrockAgentRuntime })
+  });
+  const input = {
+    sessionId: sessionId,
+    input: {
+      text: prompt,
+    },
+    retrieveAndGenerateConfiguration: {
+      type: "KNOWLEDGE_BASE",
+      knowledgeBaseConfiguration: {
+        knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+        modelArn: modelArn,
+      },
+    },
+  };
+  const command = new RetrieveAndGenerateStreamCommand(input);
+  const response = await client.send(command);
+  return response;
+}
+
+export const getAgentCommand = (prompt, sessionId, supportsStreaming) => {
+  const agentId = bedrockConfig.agentId;
+  const agentAliasId = bedrockConfig.agentAliasId;
+
+  if(parameters.modelUpdated || parameters.instructionUpdated) {
+    const command = new InvokeInlineAgentCommand({
+      instruction: parameters.instruction,
+      foundationModel: parameters.modelId,
+      sessionId,
+      inputText: prompt,
+      knowledgeBases: [
+        {
+          knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+          description: "My Knowledge Base",
+          vectorSearchConfiguration: {
+            numberOfResults: 3,
+            semanticThreshold: 0.8
+          }
+        },
+      ]
+    });
+    return command;
+  } else {
+    const command = new InvokeAgentCommand({
+      agentId: agentId,
+      agentAliasId: agentAliasId,
+      sessionId: sessionId,
+      inputText: prompt,
+      streamingConfigurations: {
+        streamFinalResponse: true
+      }
+    });
+    return command;
+  }
+}
+
+export const doesModelSupportStreaming = async (modelId, credentials) => {
+  const client = new BedrockClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrock && { endpoint: vpceEndpoints.bedrock })
+  });
+  const input = {
+    modelIdentifier: modelId,
+  };
+  const command = new GetFoundationModelCommand(input);
+  try {
+    const response = await client.send(command);
+    if (response.responseStreamSupported) {
+      if (config.debug) {
+        console.log('Model supports streaming');
+      }
+      return true;
+    }
+    } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+
+export const invokeBedrockAgent = async (
+  prompt,
+  sessionId,
+  credentials,
+  onChunk = null,
+  options = {}
+) => {
+  const apiUrl = import.meta.env.VITE_CHAT_API_URL;
+
+  if (!apiUrl) {
+    throw new Error('VITE_CHAT_API_URL is not configured');
+  }
+
+  const {
+    modelKey = null,
+    caseId = null,
+    documentType = null
+  } = options;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: prompt,
+        sessionId: sessionId || null,
+        modelKey: modelKey,
+        case_id: caseId,
+        document_type: documentType
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Chat API request failed');
+    }
+
+    const answer = result.answer || '';
+
+    if (onChunk) {
+      onChunk(answer);
+    }
+
+    return {
+      sessionId: result.sessionId || sessionId,
+      completion: answer,
+      citations: result.citations || [],
+      modelKey: result.modelKey || modelKey
+    };
+  } catch (err) {
+    console.error('Invoke Bedrock agent error:', sanitizeForLog(err.message));
+    throw err;
+  }
+};
+
+export const invokeBedrockRetrieveAndGenerateStreamCommand = async (
+  prompt,
+  files,
+  sessionId,
+  credentials,
+  modelId,
+  conversationHistory = [],
+  onChunk,
+  options = {}
+) => {
+  const apiUrl = import.meta.env.VITE_CHAT_API_URL;
+
+  if (!apiUrl) {
+    throw new Error('VITE_CHAT_API_URL is not configured');
+  }
+
+  const {
+    modelKey = null,
+    caseId = null,
+    documentType = null
+  } = options;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: prompt,
+        sessionId: sessionId || null,
+        modelKey: modelKey,
+        case_id: caseId,
+        document_type: documentType
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Chat API request failed');
+    }
+
+    const answer = result.answer || '';
+
+    if (onChunk) {
+      onChunk(answer);
+    }
+
+    return {
+      sessionId: result.sessionId || sessionId,
+      citations: result.citations || [],
+      modelKey: result.modelKey || modelKey,
+      fullResponse: {
+        metrics: {
+          inputTokenCount: 0,
+          outputTokenCount: 0
+        }
+      },
+      body: answer
+    };
+  } catch (err) {
+    console.error('Invoke Bedrock RetrieveAndGenerate error:', sanitizeForLog(err.message));
+    throw err;
+  }
+};
+
+export const invokeBedrockConverseCommand = async (prompt, files, credentials, modelId, conversationHistory = []) => {
+  if (!credentials) {
+    throw new Error('Credentials not provided');
+  }
+
+  const bedrockClient = new BedrockRuntimeClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
+  });
+
+  const formattedHistory = conversationHistory
+    .filter(msg => msg && msg.role && msg.content)
+    .map(msg => ({ role: msg.role, content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }] }));
+
+  const messages = [...formattedHistory];
+
+  if (files && files.length > 0) {
+    const content = [];
+    for (const file of files) {
+      const fileContent = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(fileContent);
+      const format = file.name.split('.').pop().toLowerCase();
+      const sanitizedName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9\s\-\(\)\[\]]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!['txt', 'pdf', 'doc', 'docx', 'csv', 'md', 'html', 'xls', 'xlsx'].includes(format)) {
+        throw new Error(`Unsupported file format: ${format}`);
+      }
+      content.push({ document: { name: sanitizedName, format: format, source: { bytes: fileBytes } } });
+    }
+    content.push({ text: prompt });
+    messages.push({ role: 'user', content: content });
+  } else {
+    messages.push({ role: 'user', content: [{ text: prompt }] });
+  }
+
+  if (parameters.modelUpdated) {
+    modelId = parameters.modelId;
+  }
+
+  try {
+    if (config.debug) {
+      console.log('Sending messages to Bedrock:', JSON.stringify(messages, null, 2));
+    }
+
+    const command = new ConverseCommand({ modelId, messages });
+    const response = await bedrockClient.send(command);
+
+    const { output, stopReason, usage, metrics, additionalModelResponseFields, trace } = response;
+
+    let responseText = '';
+    if (output && output.message) {
+      for (const content of output.message.content) {
+        if (content.text) {
+          responseText += content.text;
+        }
+      }
+    }
+
+    const validCompleteMessages = [
+      ...formattedHistory,
+      { role: 'user', content: messages.find(m => m.role === 'user').content },
+      { role: 'assistant', content: [{ text: responseText }] },
+    ];
+
+    return {
+      body: responseText,
+      conversationHistory: validCompleteMessages,
+      stopReason,
+      usage,
+      metrics,
+      additionalModelResponseFields,
+      trace,
+    };
+  } catch (error) {
+    console.error('Error invoking Bedrock:', error);
+    throw error;
+  }
+};
+
+export const invokeBedrockConverseStreamCommand = async (prompt, files, credentials, modelId, conversationHistory = [], onChunk) => {
+  if (!credentials) {
+    throw new Error('Credentials not provided');
+  }
+  if (config.debug) {
+    console.log('Model ID:', sanitizeForLog(modelId))
+  }
+  
+  const bedrockClient = new BedrockRuntimeClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
+  });
+
+  const formattedHistory = conversationHistory
+    .filter(msg => msg && msg.role && msg.content)
+    .map(msg => ({
+      role: msg.role,
+      content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }]
+    }));
+
+  const messages = [...formattedHistory];
+
+  if (files && files.length > 0) {
+    const content = [];
+
+    for (const file of files) {
+      const fileContent = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(fileContent);
+      const format = file.name.split('.').pop().toLowerCase();
+      
+      const sanitizedName = file.name
+        .replace(/\.[^/.]+$/, "")
+        .replace(/[^a-zA-Z0-9\s\-\(\)\[\]]/g, "-")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!['txt', 'pdf', 'doc', 'docx', 'csv', 'md', 'html', 'xls', 'xlsx'].includes(format)) {
+        throw new Error(`Unsupported file format: ${format}`);
+      }
+
+      content.push({
+        document: {
+          name: sanitizedName,
+          format: format,
+          source: {
+            bytes: fileBytes
+          }
+        }
+      });
+    }
+
+    content.push({
+      text: prompt
+    });
+
+    messages.push({
+      role: "user",
+      content: content
+    });
+  } else {
+    messages.push({
+      role: "user",
+      content: [{
+        text: prompt
+      }]
+    });
+  }
+
+  if(parameters.modelUpdated) {
+    modelId = parameters.modelId;
+  }
+
+  try {
+    if (config.debug) {
+      console.log('Sending messages to Bedrock:', JSON.stringify(messages, null, 2));
+    }
+
+    const command = new ConverseStreamCommand({
+      modelId,
+      messages: messages.map(msg => ({
+        role: msg.role,
+        content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }]
+      })),
+      guardrailConfig: bedrockConfig.useGuardrail ? {
+        guardrailIdentifier: bedrockConfig.guardrailId,
+        guardrailVersion: bedrockConfig.guardrailVersion,
+        trace: "enabled",
+        streamProcessingMode: "sync",
+      } : undefined,
+    });
+
+    const response = await bedrockClient.send(command);
+    let responseText = '';
+    let completeMessages = [];
+    let currentMessage = null;
+    let usageInfo = null;
+
+    for await (const event of response.stream) {
+      if (event.messageStart) {
+        currentMessage = {
+          role: event.messageStart.role,
+          content: []
+        };
+      }
+      
+      if (event.contentBlockDelta && event.contentBlockDelta.delta.text) {
+        const chunkText = event.contentBlockDelta.delta.text;
+        responseText += chunkText;
+        
+        if (onChunk) {
+          onChunk(chunkText);
+        }
+      }
+
+      if (event.metadata && event.metadata.usage) {
+        usageInfo = event.metadata.usage;
+      } else if (event.metrics && event.metrics.inputTokenCount) {
+        usageInfo = {
+          inputTokens: event.metrics.inputTokenCount || 0,
+          outputTokens: event.metrics.outputTokenCount || 0
+        };
+      }
+
+      if (event.messageStop) {
+        if (currentMessage) {
+          currentMessage.content = [{ text: responseText }];
+          completeMessages.push(currentMessage);
+        }
+      }
+    }
+
+    const validCompleteMessages = completeMessages.filter(msg => msg && msg.role && msg.content);
+    messages.push(...validCompleteMessages);
+
+    return { 
+      body: responseText,
+      conversationHistory: messages,
+      usage: usageInfo
+    };
+  } catch (error) {
+    console.error('Error invoking Bedrock:', error);
+    throw error;
+  }
+};  
+  
+export const invokeBedrock = async (prompt, sessionId, credentials, modelId) => {
+  if (!credentials) {
+    throw new Error('Credentials not provided');
+  }
+
+  const bedrockClient = new BedrockRuntimeClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockRuntime && { endpoint: vpceEndpoints.bedrockRuntime })
+  });
+
+  try {
+    let requestBody;
+    const modelId = parameters.modelId || "anthropic.claude-v2";
+
+    if (modelId.includes('claude-3')) {
+      requestBody = {
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: bedrockConfig.maxTokens,
+        temperature: 0.7,
+        top_p: 1,
+        anthropic_version: "bedrock-2023-05-31"
+      };
+    } else if (modelId.includes('claude')) {
+      requestBody = {
+        prompt: "\n\nHuman: " + prompt + "\n\nAssistant:",
+        max_tokens_to_sample: bedrockConfig.maxTokens,
+        temperature: 0.7,
+        top_p: 1,
+        stop_sequences: ["\n\nHuman:"]
+      };
+    } else if (modelId.includes('titan')) {
+      requestBody = {
+        inputText: prompt,
+        textGenerationConfig: {
+          maxTokenCount: bedrockConfig.maxTokens,
+          temperature: 0.7,
+          topP: 1,
+          stopSequences: []
+        }
+      };
+    } else if (modelId.includes('ai21')) {
+      requestBody = {
+        prompt: prompt,
+        maxTokens: bedrockConfig.maxTokens,
+        temperature: 0.7,
+        topP: 1,
+        stopSequences: []
+      };
+    }
+
+    const input = {
+      body: new TextEncoder().encode(JSON.stringify(requestBody)),
+      contentType: "application/json",
+      accept: "application/json",
+      modelId: modelId,
+    };
+
+    const command = new InvokeModelCommand(input);
+    const response = await bedrockClient.send(command);
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    if (config.debug) {
+      console.log('Raw Bedrock Response:', JSON.stringify(responseBody, null, 2));
+    }
+    
+    let completion;
+    if (modelId.includes('claude-3')) {
+      completion = responseBody.messages?.[0]?.content?.[0]?.text || 
+        responseBody.content?.[0]?.text ||
+        responseBody;
+    } else if (responseBody.completion) {
+      completion = responseBody.completion;
+    } else if (responseBody.generations) {
+      completion = responseBody.generations[0].text;
+    } else if (responseBody.outputText) {
+      completion = responseBody.outputText;
+    } else {
+      completion = responseBody;
+    }
+    
+    if (typeof completion === 'string') {
+      return { body: completion };
+    }
+    
+    return completion;
+    
+  } catch (error) {
+    console.error("Error invoking Bedrock:", sanitizeForLog(error.message));
+    throw error;
+  }
+};
+      
+export const addWebsiteToCrawl = async (websiteUrl, inclusionFilters, exclusionFilters, scope, rateLimit, maxPages, credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  
+  const dataSourceConfiguration = {
+    type: "WEB",
+    webConfiguration: {
+      sourceConfiguration: {
+        urlConfiguration: {
+          seedUrls: [
+            { url: websiteUrl }
+          ]
+        }
+      },
+      crawlerConfiguration: {
+        crawlerLimits: {
+          rateLimit: rateLimit || undefined,
+          maxPages: maxPages || 100
+        },
+        inclusionFilters: inclusionFilters || [".*"],
+        exclusionFilters: exclusionFilters || [".*\\.pdf"],
+        scope: scope || "SUBDOMAINS"
+      }
+    }
+  };
+  
+  const sanitizedName = websiteUrl
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .substring(0, 90);
+    
+  const input = {
+    knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+    name: `Web${sanitizedName}`,
+    dataSourceConfiguration: dataSourceConfiguration
+  };
+  
+  try {
+    const createCommand = new CreateDataSourceCommand(input);
+    const createResponse = await client.send(createCommand);
+    
+    const ingestionInput = {
+      knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+      dataSourceId: createResponse.dataSource.dataSourceId
+    };
+    const ingestionCommand = new StartIngestionJobCommand(ingestionInput);
+    const ingestionResponse = await client.send(ingestionCommand);
+    
+    return {
+      dataSourceId: createResponse.dataSource.dataSourceId,
+      ingestionJobId: ingestionResponse.ingestionJob.ingestionJobId,
+      status: "Website added to crawl queue and ingestion started"
+    };
+  } catch(e) {
+    console.error("Error adding website to crawl:", sanitizeForLog(e.message));
+    throw e;
+  }
+};
+
+export const syncKnowledgeBase = async (credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  
+  const input = {
+    knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+    dataSourceId: bedrockConfig.dataSourceId
+  };
+  try {
+    const command = new StartIngestionJobCommand(input);
+    const response = await client.send(command);
+    return response;
+  } catch(e) {
+    console.error('Sync knowledge base error:', sanitizeForLog(e.message));
+  }
+};
+
+export const getSyncStatus = async (ingestionJobId, credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  
+  const input = {
+    knowledgeBaseId: bedrockConfig.knowledgeBaseId,
+    dataSourceId: bedrockConfig.dataSourceId,
+    ingestionJobId: ingestionJobId
+  };
+  try {
+    const command = new GetIngestionJobCommand(input);
+    const response = await client.send(command);
+    return response.ingestionJob.status;
+  } catch(e) {
+    console.error('Get sync status error:', sanitizeForLog(e.message));
+  }
+};
+
+export const getBedrockModels = async (credentials) => {
+  return {
+    modelSummaries: [
+      {
+        modelId: "anthropic.claude-3-7-sonnet-20250219-v1:0",
+        modelName: "Claude 3.7 Sonnet",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      },
+      {
+        modelId: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        modelName: "Claude 3.5 Sonnet",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      },
+      {
+        modelId: "anthropic.claude-3-haiku-20240307-v1:0",
+        modelName: "Claude 3 Haiku",
+        providerName: "Anthropic",
+        inputModalities: ["TEXT"],
+        outputModalities: ["TEXT"],
+        responseStreamingSupported: true,
+        customizationsSupported: [],
+        inferenceTypesSupported: ["ON_DEMAND"]
+      }
+    ]
+  };
+}
+
+export const getBedrockAgent = async (credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  const input = {
+    agentId: bedrockConfig.agentId
+  };
+  const command = new GetAgentCommand(input);
+  try {
+    const response = await client.send(command);
+    return response;
+  } catch(e) {
+    console.error('Get Bedrock agent error:', sanitizeForLog(e.message));
+  }
+}
+
+export const setBedrockAgentModel = async (credentials, modelId) => {
+  setModel(modelId);
+  if(!parameters.instructionUpdated) {
+    const instruction = await getBedrockAgentInstructions(credentials);
+    setInstruction(instruction);
+  }
+}
+
+export const getBedrockAgentModel = async (credentials) => {
+  try {
+    const response = await getBedrockAgent(credentials);
+    return response.agent.foundationModel;
+  } catch (error) {
+    console.error("Error getting Bedrock agent model:", sanitizeForLog(error.message));
+    throw error;
+  }
+}
+
+export const updateBedrockAgentModel = async (credentials, modelId) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentName: bedrockConfig.agentName,
+    foundationModel: modelId,
+    agentResourceRoleArn: bedrockConfig.agentResourceRoleArn,
+  };
+  const command = new UpdateAgentCommand(input);
+  try {
+    const response = await client.send(command);
+  } catch(e) {
+    console.error('Update Bedrock agent model error:', sanitizeForLog(e.message));
+  }
+}
+
+export const getBedrockAgentInstructions = async (credentials) => {
+  try {
+    const response = await getBedrockAgent(credentials);
+    return response.agent.instruction;
+  } catch (error) {
+    console.error("Error getting Bedrock agent instructions:", sanitizeForLog(error.message));
+    throw error;
+  }
+}
+
+export const setBedrockAgentInstruction = async (credentials, instruction) => {
+  setInstruction(instruction);
+  if(!parameters.modelupdated) {
+    const model = await getBedrockAgentModel(credentials);
+    setModel(model);
+  }
+}
+
+export const updateBedrockAgentInstructions = async (credentials, instructions) => {
+  try {
+    const client = new BedrockAgentClient({
+      region: bedrockConfig.region,
+      credentials: credentials,
+      ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+    });
+
+    const modelId = bedrockConfig.defaultModelId;
+
+    const input = {
+      agentId: bedrockConfig.agentId,
+      agentName: bedrockConfig.agentName,
+      instruction: instructions,
+      agentResourceRoleArn: bedrockConfig.agentResourceRoleArn,
+      foundationModel: modelId,
+    };
+
+    const command = new UpdateAgentCommand(input);
+    const response = await client.send(command);
+    prepareBedrockAgent(credentials);
+    return response;
+  } catch (error) {
+    console.error("Error updating Bedrock agent instructions:", sanitizeForLog(error.message));
+    throw error;
+  }
+}
+
+export const prepareBedrockAgent = async (credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  const input = {
+    agentId: bedrockConfig.agentId,
+  };
+  try {
+    const command = new PrepareAgentCommand(input);
+    const response = await client.send(command);
+  } catch(e) {
+    console.error('Prepare Bedrock agent error:', sanitizeForLog(e.message));
+  }
+}
+
+export const createBedrockAgentAlias = async (credentials) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentAliasName: "USER_UPDATE_WILL_BE_DELETED",
+  };
+  try {
+    const command = new CreateAgentAliasCommand(input);
+    const response = await client.send(command);
+    return response;
+  } catch(e) {
+    console.error('Create Bedrock agent alias error:', sanitizeForLog(e.message));
+  }
+}
+
+export const getBedrockAgentAliasStatus = async (credentials, aliasId) => {
+  const client = new BedrockAgentClient({
+    region: bedrockConfig.region,
+    credentials: credentials,
+    ...(vpceEndpoints.bedrockAgent && { endpoint: vpceEndpoints.bedrockAgent })
+  });
+  const input = {
+    agentId: bedrockConfig.agentId,
+    agentAliasId: aliasId,
+  };
+  try {
+    const command = new GetAgentAliasCommand(input);
+    const response = await client.send(command);
+  } catch(e) {
+    console.error('Get Bedrock agent alias status error:', sanitizeForLog(e.message));
+  }
+}
