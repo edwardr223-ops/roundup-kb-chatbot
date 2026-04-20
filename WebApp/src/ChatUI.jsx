@@ -1,21 +1,14 @@
-﻿
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { CredentialsContext } from './SessionContext';
 import { fetchAuthSession, getCurrentUser, fetchUserAttributes } from 'aws-amplify/auth';
 import { convHistory } from './ConvHistory';
 import { bedrockConfig, config, vpceEndpoints } from './aws-config';
-
-// Markdown processing
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
-
-// Syntax highlighting
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
-// Cloudscape components
 import {
   Button,
   Container,
@@ -37,8 +30,6 @@ import FileTokenGroup from "@cloudscape-design/components/file-token-group";
 import PromptInput from "@cloudscape-design/components/prompt-input";
 import ChatBubble from "@cloudscape-design/chat-components/chat-bubble";
 import Avatar from "@cloudscape-design/chat-components/avatar";
-
-// Custom components
 import { 
   invokeBedrockAgent, 
   invokeBedrockConverseCommand,
@@ -50,12 +41,9 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { sanitizeForLog } from './utils/sanitize';
 import DocumentViewer, { isViewableFile } from './DocumentViewer';
 import KbStatusBanner from './KbStatusBanner';
-
-// Styles
 import '@cloudscape-design/global-styles/index.css';
 import './ChatUI.css';
 
-// CodeBlock Component
 const CodeBlock = React.memo(({ inline, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const isInline = !className && !String(children).includes('\n');
@@ -126,7 +114,7 @@ const CodeBlock = React.memo(({ inline, className, children, ...props }) => {
 });
 
 CodeBlock.displayName = 'CodeBlock';
-// MessageActions Component
+
 const MessageActions = ({ text, timestamp, userEmail, credentials, sessionId }) => {
   const [copiedStates, setCopiedStates] = useState({});
   const [feedbackStates, setFeedbackStates] = useState({});
@@ -148,7 +136,6 @@ const MessageActions = ({ text, timestamp, userEmail, credentials, sessionId }) 
       console.log('Feedback:', sanitizeForLog(type), 'for timestamp:', timestamp, 'sessionId:', sessionId);
     }
 
-    // Save feedback to DynamoDB
     try {
       await convHistory.updateFeedback(userEmail, timestamp, type, credentials, sessionId);
       setFeedbackStates(prev => ({ ...prev, [timestamp]: type }));
@@ -212,7 +199,6 @@ const MessageActions = ({ text, timestamp, userEmail, credentials, sessionId }) 
   );
 };
 
-// CitationBar Component
 const CitationBar = ({ citations, credentials, citationChipRefs }) => {
   const [expandedRef, setExpandedRef] = useState(null);
   const [presignedUrl, setPresignedUrl] = useState(null);
@@ -228,12 +214,11 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
 
   if (!citations || citations.length === 0) {
     if (config.debug) {
-      console.log('âš ï¸ CitationBar: No citations to display (returning null)');
+      console.log('âš ï¸ CitationBar: No citations to display (returning null)');
     }
     return null;
   }
 
-  // Deduplicate references across all citation groups
   const allRefs = [];
   const seenUris = new Set();
   citations.forEach(citation => {
@@ -294,7 +279,6 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
     }
   };
 
-  // Collect all citation texts for a given URI
   const getCitationTextsForUri = (uri) => {
     const seen = new Set();
     const texts = [];
@@ -308,7 +292,6 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
           || loc?.kendraDocumentLocation?.uri
           || loc?.customDocumentLocation?.id;
         if (refUri === uri && ref.content?.text) {
-          // Deduplicate by first 100 chars to catch near-identical chunks
           const key = ref.content.text.substring(0, 100);
           if (!seen.has(key)) {
             seen.add(key);
@@ -325,7 +308,6 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
     const s3Uri = ref.location?.s3Location?.uri;
 
     if (s3Uri && isViewableFile(uri)) {
-      // Open in document viewer
       setViewerState({
         visible: true,
         fileName: getFileName(uri),
@@ -338,11 +320,9 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
         setViewerState(prev => ({ ...prev, fileUrl: url }));
       }
     } else if (s3Uri) {
-      // Non-viewable S3 file - download
       const url = await generatePresignedUrl(s3Uri);
       if (url) window.open(url, '_blank');
     } else {
-      // Web/other URL - open directly
       window.open(uri, '_blank');
     }
   };
@@ -455,7 +435,6 @@ const CitationBar = ({ citations, credentials, citationChipRefs }) => {
   );
 };
 
-// ChatMessage Component
 const ChatMessage = React.memo(({ message, username, userInitials, userEmail, credentials, sessionId, modelId }) => {
   const isUser = message.role === 'user';
   const messageText = message.content?.[0]?.text;
@@ -471,7 +450,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     }
   }
 
-  // Build deduplicated citation refs list (mirrors CitationBar logic)
   const allRefs = useMemo(() => {
     if (!message.citations || message.citations.length === 0) return [];
     const refs = [];
@@ -494,7 +472,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     return refs;
   }, [message.citations]);
 
-  // Build span-based citation markers and inject [N] into the text at span boundaries
   const { textWithCitations, citationDetails } = useMemo(() => {
     if (!message.citations || message.citations.length === 0 || !messageText) {
       return { textWithCitations: null, citationDetails: [] };
@@ -509,7 +486,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
       if (span && span.start !== undefined && span.end !== undefined) {
         const refs = citation.retrievedReferences || [];
 
-        // Build list of unique source filenames for this citation
         const fileNames = [...new Set(refs.map(ref => {
           const refLoc = ref.location;
           const refUri = refLoc?.s3Location?.uri
@@ -545,7 +521,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
 
     if (markers.length === 0) return { textWithCitations: null, citationDetails: [] };
 
-    // Sort by end position descending so insertions don't shift earlier positions
     markers.sort((a, b) => b.end - a.end);
 
     let result = messageText;
@@ -558,7 +533,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     return { textWithCitations: result, citationDetails: details };
   }, [message.citations, messageText]);
 
-  // Custom text renderer that makes [1], [2] etc. clickable with popovers
   const renderTextWithCitations = (text) => {
     if (!allRefs.length && citationDetails.length === 0) return text;
     const parts = text.split(/(\[\d+\])/g);
@@ -609,7 +583,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     });
   };
 
-  // Custom ReactMarkdown components with citation-aware text rendering
   const markdownComponents = useMemo(() => ({
     code: CodeBlock,
     p: ({ children }) => <p>{React.Children.map(children, child =>
@@ -618,7 +591,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     li: ({ children, ...props }) => <li {...props}>{React.Children.map(children, child =>
       typeof child === 'string' ? renderTextWithCitations(child) : child
     )}</li>,
-  }), [allRefs, citationDetails]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [allRefs, citationDetails]);
 
   if (!messageText) return null;
 
@@ -677,6 +650,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
 });
 
 ChatMessage.displayName = 'ChatMessage';
+
 const ChatUI = React.forwardRef(({
   chatType,
   setChatType,
@@ -691,7 +665,6 @@ const ChatUI = React.forwardRef(({
   navigationOpen,
   personaRefreshTrigger
 }, ref) => {
-  // State management
   const [messages, setMessages] = useState([]);
   const [currentSessionMessages, setCurrentSessionMessages] = useState([]);
   const [localMessages, setLocalMessages] = useState([]);
@@ -709,14 +682,14 @@ const ChatUI = React.forwardRef(({
   const [personas, setPersonas] = useState([]);
   const [userEmail, setUserEmail] = useState('');
   const [selectedKbModel, setSelectedKbModel] = useState('sonnet46');
+  const [selectedDocType, setSelectedDocType] = useState({ label: 'Trials', value: 'trials' });
+  const [selectedCase, setSelectedCase] = useState({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
 
-  // Refs and Context
   const chatContainerRef = useRef(null);
   const credentials = useContext(CredentialsContext);
 
   const ragEnabled = bedrockConfig.ragEnabled !== "false";
 
-  // Transform model and chat type options to Select component format
   const modelOptions = useMemo(() => {
     return topNavModels.map(model => ({
       label: model.text,
@@ -733,15 +706,14 @@ const ChatUI = React.forwardRef(({
   }, [chatTypes, ragEnabled]);
 
   const kbModelOptions = useMemo(() => {
-  return [
-    { label: 'Sonnet 4.6', value: 'sonnet46' },
-    { label: 'Opus 4.5', value: 'opus45' },
-    { label: 'Nova Pro', value: 'novapro' },
-    { label: 'Haiku', value: 'haiku' }
-  ];
+    return [
+      { label: 'Sonnet 4.6', value: 'sonnet46' },
+      { label: 'Opus 4.5', value: 'opus45' },
+      { label: 'Nova Pro', value: 'novapro' },
+      { label: 'Haiku', value: 'haiku' }
+    ];
   }, []);
 
-  // Handle window resize to detect mobile devices
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -751,7 +723,6 @@ const ChatUI = React.forwardRef(({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Force chatType to LLM when RAG is disabled
   useEffect(() => {
     if (!ragEnabled && chatType === 'RAG') {
       
@@ -770,7 +741,6 @@ const ChatUI = React.forwardRef(({
     return model[item];
   }
 
-  // Initialize user details and personas
   useEffect(() => {
     const initializeUser = async () => {
       try {
@@ -780,7 +750,6 @@ const ChatUI = React.forwardRef(({
           setUserEmail(email);
           setUserInitials(email.charAt(0).toUpperCase());
           
-          // Initialize personas
           if (credentials) {
             await PersonaService.initializeDefaultPersonas(email, credentials);
             const userPersonas = await PersonaService.getUserPersonas(email, credentials);
@@ -794,7 +763,6 @@ const ChatUI = React.forwardRef(({
     initializeUser();
   }, [username, credentials]);
 
-  // Handle persona refresh trigger
   useEffect(() => {
     const refreshPersonas = async () => {
       if (personaRefreshTrigger > 0 && userEmail && credentials) {
@@ -810,11 +778,8 @@ const ChatUI = React.forwardRef(({
     refreshPersonas();
   }, [personaRefreshTrigger, userEmail, credentials]);
 
-  // Track whether we're loading history to suppress reset effects
   const skipResetRef = useRef(0);
 
-  // Reset session and clear messages when model changes
-  // This prevents the new model from seeing the old model's responses in Chat History
   useEffect(() => {
     if (skipResetRef.current > 0) {
       skipResetRef.current--;
@@ -828,7 +793,6 @@ const ChatUI = React.forwardRef(({
     setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
   }, [modelId]);
 
-  // Reset session when chat type changes (RAG vs LLM vs Agentic)
   useEffect(() => {
     if (skipResetRef.current > 0) {
       skipResetRef.current--;
@@ -842,12 +806,10 @@ const ChatUI = React.forwardRef(({
     setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
   }, [chatType]);
 
-  // Scroll to bottom effect
   useEffect(() => {
     const scrollToBottom = () => {
       const chatContainer = chatContainerRef.current;
       if (chatContainer) {
-        // Add a small delay to ensure content is fully rendered
         setTimeout(() => {
           chatContainer.scrollTop = chatContainer.scrollHeight;
         }, 50);
@@ -856,7 +818,6 @@ const ChatUI = React.forwardRef(({
     scrollToBottom();
   }, [currentSessionMessages]);
 
-  // Debug effects
   useEffect(() => {
     if (config.debug) {
       console.log('LocalMessages state changed:', localMessages);
@@ -869,7 +830,6 @@ const ChatUI = React.forwardRef(({
     }
   }, [conversationHistory]);
 
-  // Handle Chat History changes
   useEffect(() => {
     if (conversationHistory.length > 0) {
       if (config.debug) {
@@ -904,14 +864,12 @@ const ChatUI = React.forwardRef(({
     }
   }, [conversationHistory, chatSessionId]);
 
-  // External state update handler
   React.useImperativeHandle(ref, () => ({
     updateState: (messages, newChatSessionId, historyModelId, historyChatType, historyPersonaId) => {
       if (config.debug) {
         console.log('Updating ChatUI state with messages:', messages);
       }
 
-      // Count how many effects will fire so we can suppress them
       let skipsNeeded = 0;
       if (historyModelId && historyModelId !== modelId) skipsNeeded++;
       if (historyChatType && historyChatType !== chatType) skipsNeeded++;
@@ -929,7 +887,6 @@ const ChatUI = React.forwardRef(({
         }
       }
 
-      // Restore model, chat type, and persona from history if available
       if (historyModelId) setModelId(historyModelId);
       const restoredPersona = historyPersonaId && personas.some(p => p.id === historyPersonaId)
         ? historyPersonaId
@@ -946,26 +903,22 @@ const ChatUI = React.forwardRef(({
       }, 100);
     }
   }));
-  // Handle submit function
+
   const handleSubmit = async () => {
     if (!input.trim()) return;
   
     if (config.debug) {
       console.log('Current session messages before new message:', currentSessionMessages);
-    }    // Persona disabled for Lambda-only mode
+    }
     const selectedPersona = null;
     const personaPrompt = '';
     const enhancedInput = input;
-
-    // Persona documents disabled for Lambda-only mode
     const personaFiles = [];
-
-    // Combine uploaded files with persona files
     const allFiles = [...files, ...personaFiles];
   
     const userMessage = {
       role: 'user',
-      content: [{ text: input }], // Store original user input for display
+      content: [{ text: input }],
       timestamp: Date.now()
     };
   
@@ -982,12 +935,10 @@ const ChatUI = React.forwardRef(({
     setIsLoading(true);
   
     try {
-  
       if (config.debug) {
         console.log('Current session messages before formatting:', currentSessionMessages);
       }
   
-      // Build formatted history from current messages (not including the new user message yet)
       const formattedHistory = currentSessionMessages.map(msg => ({
         role: msg.role,
         content: [{ text: msg.content[0].text }]
@@ -1029,6 +980,12 @@ const ChatUI = React.forwardRef(({
                                 getModelItem(foundationModels, modelId, 'responseStreamingSupported');
         
         if (supportsStreaming) {
+          console.log('RAG function received KB model:', selectedKbModel);
+          console.log('RAG filters:', {
+          selectedDocType,
+          selectedCase,
+          selectedKbModel
+        });
           result = await invokeBedrockRetrieveAndGenerateStreamCommand(
             enhancedInput,
             allFiles,
@@ -1036,14 +993,15 @@ const ChatUI = React.forwardRef(({
             credentials,
             modelId,
             formattedHistory,
-            handleStreamChunk
+            handleStreamChunk,
+            selectedKbModel
+            
           );
   
           if (config.debug) {
             console.log('Final streamed response:', result);
           }
           
-          // Check if the result contains usage data
           if (result.fullResponse && result.fullResponse.metrics) {
             usageData = {
               inputTokens: result.fullResponse.metrics.inputTokenCount || 0,
@@ -1067,7 +1025,6 @@ const ChatUI = React.forwardRef(({
           }
         }
 
-        // Attach citations to the assistant message
         if (citations.length > 0) {
           if (config.debug) {
             console.log('âœ… Attaching', citations.length, 'citations to assistant message');
@@ -1087,14 +1044,14 @@ const ChatUI = React.forwardRef(({
               return updated;
             } else {
               if (config.debug) {
-                console.log('âš ï¸ Last message is not an assistant message, cannot attach citations');
+                console.log('âš ï¸ Last message is not an assistant message, cannot attach citations');
               }
             }
             return prevMessages;
           });
         } else {
           if (config.debug) {
-            console.log('âš ï¸ No citations to attach - citations array is empty');
+            console.log('âš ï¸ No citations to attach - citations array is empty');
           }
         }
   
@@ -1112,7 +1069,6 @@ const ChatUI = React.forwardRef(({
           console.log('Final streamed response:', streamedResponse);
         }
         
-        // Check if the response contains usage data
         if (response && response.usage) {
           usageData = {
             inputTokens: response.usage.inputTokens || 0,
@@ -1128,17 +1084,12 @@ const ChatUI = React.forwardRef(({
         });
         const agenticInput = `Current date: ${currentDate}\n\n${enhancedInput}`;
         result = await invokeBedrockAgent(agenticInput, chatSessionId, credentials, handleStreamChunk);
-        // streamedResponse is already built up by handleStreamChunk
       }
   
-      // Save conversation to history for both chat types
       try {
-        
-        // Get token counts from the API response if available, otherwise estimate
         let inputTokens, outputTokens;
 
         if (usageData) {
-          // Use the token counts from the API response
           inputTokens = usageData.inputTokens;
           outputTokens = usageData.outputTokens;
 
@@ -1146,7 +1097,6 @@ const ChatUI = React.forwardRef(({
             console.log('Using token counts from API response:', { inputTokens, outputTokens });
           }
         } else {
-          // Fall back to estimation
           inputTokens = Math.ceil(input.length / 4);
           outputTokens = Math.ceil((chatType === 'RAG' ? (result.completion || streamedResponse || '') : streamedResponse).length / 4);
 
@@ -1155,7 +1105,6 @@ const ChatUI = React.forwardRef(({
           }
         }
 
-        // Create timestamp once to use for both DynamoDB and message state
         const savedTimestamp = Date.now();
 
         const dynPayload = {
@@ -1174,10 +1123,8 @@ const ChatUI = React.forwardRef(({
 
         console.log('SAVING HISTORY', dynPayload); await convHistory.saveConversation(dynPayload);
 
-        // Update the assistant message with the actual saved timestamp
         setCurrentSessionMessages(prevMessages => {
           return prevMessages.map((msg, index) => {
-            // Update the last assistant message with the saved timestamp
             if (index === prevMessages.length - 1 && msg.role === 'assistant') {
               return { ...msg, timestamp: savedTimestamp };
             }
@@ -1210,7 +1157,6 @@ const ChatUI = React.forwardRef(({
     }
   };
 
-  // Loading bubble component
   const LoadingBubble = () => (
     <ChatBubble
       ariaLabel="Generative AI assistant"
@@ -1231,7 +1177,6 @@ const ChatUI = React.forwardRef(({
     </ChatBubble>
   );
   
-  // File handling setup
   const areFilesDragging = useFilesDragging().areFilesDragging;
 
   const secondaryActions = useMemo(() => (
@@ -1363,11 +1308,10 @@ const ChatUI = React.forwardRef(({
                               <Select
                                 selectedOption={modelOptions.find(model => model.value === modelId) || null}
                                 onChange={({ detail }) => {
-                                  setModelId(detail.selectedOption.value);
-                                  if(config.debug) {
-                                    console.log('Model successfully changed to:', detail.selectedOption.value);
-                                  }
-                                }}
+                                if (chatType === 'RAG') {
+                                  setSelectedKbModel(detail.selectedOption.value);
+                                }
+                              }}
                                 options={modelOptions}
                                 placeholder="Select a model"
                                 expandToViewport
@@ -1387,38 +1331,31 @@ const ChatUI = React.forwardRef(({
                       </>
                     ) : (
                       <>
-                      <div style={{ width: '220px', minWidth: '220px', maxWidth: '220px' }}>
-                        <Select
-                          selectedOption={
-                            chatType === 'RAG'
-                              ? kbModelOptions.find(option => option.value === selectedKbModel) || null
-                              : modelOptions.find(model => model.value === modelId) || null
-                          }
-                          onChange={({ detail }) => {
-                            if (chatType === 'RAG') {
-                              setSelectedKbModel(detail.selectedOption.value);
-                              if (config.debug) {
-                                console.log('KB model successfully changed to:', detail.selectedOption.value);
-                              }
-                            } else {
-                              setModelId(detail.selectedOption.value);
-                              if (config.debug) {
-                                console.log('Model successfully changed to:', detail.selectedOption.value);
-                              }
+                        <div style={{ width: '220px', minWidth: '220px', maxWidth: '220px' }}>
+                          <Select
+                            selectedOption={
+                              chatType === 'RAG'
+                                ? kbModelOptions.find(option => option.value === selectedKbModel) || null
+                                : modelOptions.find(model => model.value === modelId) || null
                             }
-                          }}
-                          options={chatType === 'RAG' ? kbModelOptions : modelOptions}
-                          placeholder={chatType === 'RAG' ? 'KB Model' : 'Select a model'}
-                          expandToViewport
-                          filteringType="auto"
-                        />
-                      </div>
+                            onChange={({ detail }) => {
+                              if (chatType === 'RAG') {
+                                setSelectedKbModel(detail.selectedOption.value);
+                              }
+                            }}
+                            options={chatType === 'RAG' ? kbModelOptions : modelOptions}
+                            placeholder={chatType === 'RAG' ? 'KB Model' : 'Select a model'}
+                            expandToViewport
+                            filteringType="auto"
+                          />
+                        </div>
 
                         <div style={{ width: '140px', minWidth: '140px', maxWidth: '140px' }}>
                           <Select
-                            selectedOption={{ label: 'Trials', value: 'trials' }}
+                            selectedOption={selectedDocType}
+                            onChange={({ detail }) => setSelectedDocType(detail.selectedOption)}
                             options={[
-                              { label: 'Trials', value: 'trials' },
+                              { label: 'Trials', value: 'trial_transcript' },
                               { label: 'Depositions', value: 'depositions' },
                               { label: 'Pleadings', value: 'pleadings' },
                               { label: 'Hearings', value: 'hearings' }
@@ -1430,11 +1367,12 @@ const ChatUI = React.forwardRef(({
 
                         <div style={{ width: '270px', minWidth: '270px', maxWidth: '270px' }}>
                           <Select
-                            selectedOption={{ label: 'Dennis v. Monsanto (CLH-CA)', value: 'Dennis v. Monsanto' }}
+                            selectedOption={selectedCase}
+                            onChange={({ detail }) => setSelectedCase(detail.selectedOption)}
                             options={[
-                              { label: 'Dennis v. Monsanto (CLH-CA)', value: 'Dennis v. Monsanto' },
-                              { label: 'Barnes v. Monsanto (Itkin-GA)', value: 'Barnes v. Monsanto' },
-                              { label: 'McKivison v. Monsanto (Itkin-PA)', value: 'McKivison v. Monsanto' }
+                              { label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' },
+                              { label: 'Barnes v. Monsanto', value: 'barnes_itkin_ga' },
+                              { label: 'McKivison v. Monsanto', value: 'mckivison_itkin_pa' }
                             ]}
                             placeholder="Sub-Type"
                             expandToViewport
@@ -1542,20 +1480,3 @@ const ChatUI = React.forwardRef(({
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
