@@ -630,15 +630,6 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
         actions={!isUser && !isStreaming && <MessageActions text={messageText} timestamp={message.timestamp} userEmail={userEmail} credentials={credentials} sessionId={sessionId} />}
       >
         <Box>
-          {!isUser && displayedModelLabel && (
-            <Box
-              fontSize="body-s"
-              color="text-body-secondary"
-              margin={{ bottom: 'xxs' }}
-            >
-              Model: {displayedModelLabel}
-            </Box>
-          )}
           {isUser ? (
             <span>{messageText}</span>
           ) : (
@@ -650,8 +641,19 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
               {textWithCitations || messageText}
             </ReactMarkdown>
           )}
+
           {isStreaming && (
             <span className="cursor-blink">â–‹</span>
+          )}
+
+          {!isUser && displayedModelLabel && (
+            <Box
+              fontSize="body-s"
+              color="text-status-inactive"
+              margin={{ top: 's' }}
+            >
+              Model: {displayedModelLabel}
+            </Box>
           )}
         </Box>
         {!isUser && !isStreaming && message.citations && (
@@ -1117,19 +1119,31 @@ const ChatUI = React.forwardRef(({
         }
 
         setCurrentSessionMessages(prevMessages => {
+          const resolvedModelKey = result.modelKey || selectedKbModel;
           const lastMessage = prevMessages[prevMessages.length - 1];
+
           if (lastMessage && lastMessage.role === 'assistant') {
             return prevMessages.map((msg, index) =>
               index === prevMessages.length - 1
                 ? {
                     ...msg,
-                    modelKey: result.modelKey || selectedKbModel,
+                    modelKey: resolvedModelKey,
                     ...(citations.length > 0 ? { citations } : {})
                   }
                 : msg
             );
           }
-          return prevMessages;
+
+          return [
+            ...prevMessages,
+            {
+              role: 'assistant',
+              content: [{ text: streamedResponse || result.body || result.completion || '' }],
+              timestamp: Date.now(),
+              modelKey: resolvedModelKey,
+              ...(citations.length > 0 ? { citations } : {})
+            }
+          ];
         });
 
         if (citations.length > 0) {
