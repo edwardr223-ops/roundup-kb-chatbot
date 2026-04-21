@@ -455,7 +455,9 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
   const messageText = message.content?.[0]?.text;
   const isStreaming = message.isStreaming;
   const citationChipRefs = useRef({});
-  const displayedModelLabel = !isUser && message.modelKey ? formatKbModelLabel(message.modelKey) : null;
+  const displayedModelLabel = !isUser
+  ? formatKbModelLabel(message.modelKey || (message.role === 'assistant' && message.chatType === 'RAG' ? message.selectedKbModel : null))
+  : null;
 
   if (config.debug && !isUser) {
     console.log('ðŸŽ¨ ChatMessage rendering assistant message');
