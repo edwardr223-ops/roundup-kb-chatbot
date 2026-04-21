@@ -755,7 +755,7 @@ const ChatUI = React.forwardRef(({
 
   useEffect(() => {
     if (selectedDocType?.value === 'deposition') {
-      setSelectedSubType({ label: 'Chase, Steven', value: 'Steven Chase' });
+      setSelectedSubType({ label: 'Steven Chase', value: 'Steven Chase' });
     } else {
       setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
     }
