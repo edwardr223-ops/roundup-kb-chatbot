@@ -702,14 +702,14 @@ const ChatUI = React.forwardRef(({
 
   const depositionOptions = useMemo(() => {
     return [
-      { label: 'Chase, Steven', value: 'Chase, Steven' },
-      { label: 'Dennis, Mike', value: 'Dennis, Mike' },
-      { label: 'Gates Richard', value: 'Gates Richard' },
-      { label: 'Herb, Kimberly', value: 'Herb, Kimberly' },
-      { label: 'Revels, Diane', value: 'Revels, Diane' },
-      { label: 'Stone, Eric', value: 'Stone, Eric' },
-      { label: 'Wheat, Curtis', value: 'Wheat, Curtis' },
-      { label: 'Womack, Judith', value: 'Womack, Judith' }
+      { label: 'Steven Chase', value: 'Steven Chase' },
+      { label: 'Mike Dennis', value: 'Mike Dennis' },
+      { label: 'Richard Gates', value: 'Richard Gates' },
+      { label: 'Kimberly Herb', value: 'Kimberly Herb' },
+      { label: 'Diane Revels', value: 'Diane Revels' },
+      { label: 'Eric Stone', value: 'Eric Stone' },
+      { label: 'Curtis Wheat', value: 'Curtis Wheat' },
+      { label: 'Judith Womack', value: 'Judith Womack' }
     ];
   }, []);
 
@@ -755,7 +755,7 @@ const ChatUI = React.forwardRef(({
 
   useEffect(() => {
     if (selectedDocType?.value === 'deposition') {
-      setSelectedSubType({ label: 'Chase, Steven', value: 'Chase, Steven' });
+      setSelectedSubType({ label: 'Chase, Steven', value: 'Steven Chase' });
     } else {
       setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
     }
