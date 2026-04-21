@@ -1371,10 +1371,13 @@ const ChatUI = React.forwardRef(({
                               <Select
                                 selectedOption={modelOptions.find(model => model.value === modelId) || null}
                                 onChange={({ detail }) => {
-                                  if (chatType === 'RAG') {
-                                    setSelectedKbModel(detail.selectedOption.value);
-                                  }
-                                }}
+                                if (chatType === 'RAG') {
+                                  setSelectedKbModel(detail.selectedOption.value);
+                                  setRagSessionId('');
+                                  setCurrentSessionMessages([]);
+                                  setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                                }
+                              }}
                                 options={modelOptions}
                                 placeholder="Select a model"
                                 expandToViewport
@@ -1436,14 +1439,15 @@ const ChatUI = React.forwardRef(({
                     )}
                     <Button
                       onClick={() => {
-                        setCurrentSessionMessages([]);
-                        setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
-                        setInput('');
-                        setFiles([]);
-                        setSelectedPersonaId('default');
-                        setSelectedDocType({ label: 'Trials', value: 'trial_transcript' });
-                        setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
-                      }}
+                      setCurrentSessionMessages([]);
+                      setRagSessionId('');
+                      setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                      setInput('');
+                      setFiles([]);
+                      setSelectedPersonaId('default');
+                      setSelectedDocType({ label: 'Trials', value: 'trial_transcript' });
+                      setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
+                    }}
                       iconName="refresh"
                       variant={isMobile ? "icon" : undefined}
                       ariaLabel={isMobile ? "New Chat" : undefined}

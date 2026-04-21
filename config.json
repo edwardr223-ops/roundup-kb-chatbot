@@ -1,0 +1,1 @@
+{"vectorSearchConfiguration":{"numberOfResults":10,"filter":{"equals":{"key":"proceeding_type","value":"verdict"}}}}
