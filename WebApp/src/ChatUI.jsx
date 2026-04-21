@@ -44,6 +44,21 @@ import KbStatusBanner from './KbStatusBanner';
 import '@cloudscape-design/global-styles/index.css';
 import './ChatUI.css';
 
+const formatKbModelLabel = (modelKey) => {
+  switch (modelKey) {
+    case 'sonnet46':
+      return 'Sonnet 4.6';
+    case 'opus45':
+      return 'Opus 4.5';
+    case 'novapro':
+      return 'Nova Pro';
+    case 'haiku':
+      return 'Haiku';
+    default:
+      return modelKey || 'AI Assistant';
+  }
+};
+
 const CodeBlock = React.memo(({ inline, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const isInline = !className && !String(children).includes('\n');
@@ -440,6 +455,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
   const messageText = message.content?.[0]?.text;
   const isStreaming = message.isStreaming;
   const citationChipRefs = useRef({});
+  const displayedModelLabel = !isUser && message.modelKey ? formatKbModelLabel(message.modelKey) : null;
 
   if (config.debug && !isUser) {
     console.log('ðŸŽ¨ ChatMessage rendering assistant message');
@@ -608,12 +624,21 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
             initials={isUser ? userInitials : undefined}
             color={isUser ? undefined : "gen-ai"}
             iconName={isUser ? undefined : "gen-ai"}
-            tooltipText={isUser ? username : modelId || 'AI Assistant'}
+            tooltipText={isUser ? username : displayedModelLabel || modelId || 'AI Assistant'}
           />
         }
         actions={!isUser && !isStreaming && <MessageActions text={messageText} timestamp={message.timestamp} userEmail={userEmail} credentials={credentials} sessionId={sessionId} />}
       >
         <Box>
+          {!isUser && displayedModelLabel && (
+            <Box
+              fontSize="body-s"
+              color="text-body-secondary"
+              margin={{ bottom: 'xxs' }}
+            >
+              Model: {displayedModelLabel}
+            </Box>
+          )}
           {isUser ? (
             <span>{messageText}</span>
           ) : (
@@ -641,6 +666,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     prevProps.message.timestamp === nextProps.message.timestamp &&
     prevProps.message.isStreaming === nextProps.message.isStreaming &&
     prevProps.message.citations === nextProps.message.citations &&
+    prevProps.message.modelKey === nextProps.message.modelKey &&
     prevProps.username === nextProps.username &&
     prevProps.userInitials === nextProps.userInitials &&
     prevProps.userEmail === nextProps.userEmail &&
@@ -899,6 +925,7 @@ const ChatUI = React.forwardRef(({
             role: 'assistant',
             content: [{ text: msg.response }],
             timestamp: msg.timestamp + 1,
+            modelKey: msg.kbModelKey || null,
             ...(msg.citations && (() => {
               try { const c = JSON.parse(msg.citations); return c.length > 0 ? { citations: c } : {}; }
               catch { return {}; }
@@ -1083,38 +1110,35 @@ const ChatUI = React.forwardRef(({
           console.log('Citations received from bedrockAgent:', citations);
           console.log('Citations array length:', citations.length);
           console.log('Citations array type:', Array.isArray(citations) ? 'array' : typeof citations);
+          console.log('Returned RAG modelKey:', result.modelKey);
           if (citations.length > 0) {
             console.log('First citation structure:', JSON.stringify(citations[0], null, 2));
           }
         }
 
+        setCurrentSessionMessages(prevMessages => {
+          const lastMessage = prevMessages[prevMessages.length - 1];
+          if (lastMessage && lastMessage.role === 'assistant') {
+            return prevMessages.map((msg, index) =>
+              index === prevMessages.length - 1
+                ? {
+                    ...msg,
+                    modelKey: result.modelKey || selectedKbModel,
+                    ...(citations.length > 0 ? { citations } : {})
+                  }
+                : msg
+            );
+          }
+          return prevMessages;
+        });
+
         if (citations.length > 0) {
           if (config.debug) {
-            console.log('âœ… Attaching', citations.length, 'citations to assistant message');
+            console.log('âœ… Attached citations and modelKey to assistant message');
           }
-          setCurrentSessionMessages(prevMessages => {
-            const lastMessage = prevMessages[prevMessages.length - 1];
-            if (lastMessage && lastMessage.role === 'assistant') {
-              const updated = prevMessages.map((msg, index) => 
-                index === prevMessages.length - 1
-                  ? { ...msg, citations }
-                  : msg
-              );
-              if (config.debug) {
-                console.log('âœ… Updated last message with citations');
-                console.log('Last message now has citations:', updated[updated.length - 1].citations);
-              }
-              return updated;
-            } else {
-              if (config.debug) {
-                console.log('âš ï¸ Last message is not an assistant message, cannot attach citations');
-              }
-            }
-            return prevMessages;
-          });
         } else {
           if (config.debug) {
-            console.log('âš ï¸ No citations to attach - citations array is empty');
+            console.log('âš ï¸ No citations to attach - citations array is empty, modelKey still attached');
           }
         }
   
@@ -1181,6 +1205,7 @@ const ChatUI = React.forwardRef(({
           chatType: chatType,
           ...(selectedPersonaId && selectedPersonaId !== 'default' && { personaId: selectedPersonaId }),
           ...(chatType === 'RAG' && { citations: JSON.stringify(citations) }),
+          ...(chatType === 'RAG' && { kbModelKey: result?.modelKey || selectedKbModel }),
           timestamp: savedTimestamp
         };
 
@@ -1189,7 +1214,11 @@ const ChatUI = React.forwardRef(({
         setCurrentSessionMessages(prevMessages => {
           return prevMessages.map((msg, index) => {
             if (index === prevMessages.length - 1 && msg.role === 'assistant') {
-              return { ...msg, timestamp: savedTimestamp };
+              return { 
+                ...msg, 
+                timestamp: savedTimestamp,
+                ...(chatType === 'RAG' ? { modelKey: result?.modelKey || selectedKbModel } : {})
+              };
             }
             return msg;
           });
@@ -1369,17 +1398,23 @@ const ChatUI = React.forwardRef(({
                           content={
                             <div style={{ minWidth: '250px' }}>
                               <Select
-                                selectedOption={modelOptions.find(model => model.value === modelId) || null}
-                                onChange={({ detail }) => {
-                                if (chatType === 'RAG') {
-                                  setSelectedKbModel(detail.selectedOption.value);
-                                  setRagSessionId('');
-                                  setCurrentSessionMessages([]);
-                                  setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                                selectedOption={
+                                  chatType === 'RAG'
+                                    ? kbModelOptions.find(option => option.value === selectedKbModel) || null
+                                    : modelOptions.find(model => model.value === modelId) || null
                                 }
-                              }}
-                                options={modelOptions}
-                                placeholder="Select a model"
+                                onChange={({ detail }) => {
+                                  if (chatType === 'RAG') {
+                                    setSelectedKbModel(detail.selectedOption.value);
+                                    setRagSessionId('');
+                                    setCurrentSessionMessages([]);
+                                    setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                                  } else {
+                                    setModelId(detail.selectedOption.value);
+                                  }
+                                }}
+                                options={chatType === 'RAG' ? kbModelOptions : modelOptions}
+                                placeholder={chatType === 'RAG' ? 'KB Model' : 'Select a model'}
                                 expandToViewport
                                 filteringType="auto"
                               />
@@ -1390,7 +1425,7 @@ const ChatUI = React.forwardRef(({
                             <Button
                               iconName="gen-ai"
                               variant="icon"
-                              ariaLabel={`Model: ${modelOptions.find(model => model.value === modelId)?.label || 'Select'}`}
+                              ariaLabel={`Model: ${chatType === 'RAG' ? (kbModelOptions.find(option => option.value === selectedKbModel)?.label || 'Select') : (modelOptions.find(model => model.value === modelId)?.label || 'Select')}`}
                             />
                           </div>
                         </Popover>
@@ -1407,6 +1442,11 @@ const ChatUI = React.forwardRef(({
                             onChange={({ detail }) => {
                               if (chatType === 'RAG') {
                                 setSelectedKbModel(detail.selectedOption.value);
+                                setRagSessionId('');
+                                setCurrentSessionMessages([]);
+                                setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                              } else {
+                                setModelId(detail.selectedOption.value);
                               }
                             }}
                             options={chatType === 'RAG' ? kbModelOptions : modelOptions}
@@ -1439,15 +1479,15 @@ const ChatUI = React.forwardRef(({
                     )}
                     <Button
                       onClick={() => {
-                      setCurrentSessionMessages([]);
-                      setRagSessionId('');
-                      setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
-                      setInput('');
-                      setFiles([]);
-                      setSelectedPersonaId('default');
-                      setSelectedDocType({ label: 'Trials', value: 'trial_transcript' });
-                      setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
-                    }}
+                        setCurrentSessionMessages([]);
+                        setRagSessionId('');
+                        setChatSessionId(Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join(''));
+                        setInput('');
+                        setFiles([]);
+                        setSelectedPersonaId('default');
+                        setSelectedDocType({ label: 'Trials', value: 'trial_transcript' });
+                        setSelectedSubType({ label: 'Dennis v. Monsanto', value: 'dennis_clh_ca' });
+                      }}
                       iconName="refresh"
                       variant={isMobile ? "icon" : undefined}
                       ariaLabel={isMobile ? "New Chat" : undefined}
