@@ -30,8 +30,8 @@ import FileTokenGroup from "@cloudscape-design/components/file-token-group";
 import PromptInput from "@cloudscape-design/components/prompt-input";
 import ChatBubble from "@cloudscape-design/chat-components/chat-bubble";
 import Avatar from "@cloudscape-design/chat-components/avatar";
-import { 
-  invokeBedrockAgent, 
+import {
+  invokeBedrockAgent,
   invokeBedrockConverseCommand,
   invokeBedrockConverseStreamCommand,
   invokeBedrockRetrieveAndGenerateStreamCommand
@@ -59,10 +59,33 @@ const formatKbModelLabel = (modelKey) => {
   }
 };
 
+const generateMessageId = (prefix = 'msg') =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const upsertMessageById = (messages, messageId, updateExisting, createIfMissing) => {
+  const index = messages.findIndex(msg => msg.messageId === messageId);
+
+  if (index !== -1) {
+    return messages.map((msg, i) => (i === index ? updateExisting(msg) : msg));
+  }
+
+  return [...messages, createIfMissing()];
+};
+
+const updateMessageById = (messages, messageId, updater) => {
+  const index = messages.findIndex(msg => msg.messageId === messageId);
+
+  if (index === -1) {
+    return messages;
+  }
+
+  return messages.map((msg, i) => (i === index ? updater(msg) : msg));
+};
+
 const CodeBlock = React.memo(({ inline, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const isInline = !className && !String(children).includes('\n');
-  
+
   if (isInline) {
     return <code className="inline-code">{children}</code>;
   }
@@ -455,9 +478,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
   const messageText = message.content?.[0]?.text;
   const isStreaming = message.isStreaming;
   const citationChipRefs = useRef({});
-  const displayedModelLabel = !isUser
-  ? formatKbModelLabel(message.modelKey || (message.role === 'assistant' && message.chatType === 'RAG' ? message.selectedKbModel : null))
-  : null;
+  const displayedModelLabel = !isUser && message.modelKey ? formatKbModelLabel(message.modelKey) : null;
 
   if (config.debug && !isUser) {
     console.log('ðŸŽ¨ ChatMessage rendering assistant message');
@@ -613,7 +634,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
 
   if (!messageText) return null;
 
-  const messageKey = `${message.timestamp}-${message.role}-${messageText.substring(0, 20)}`;
+  const messageKey = message.messageId || `${message.timestamp}-${message.role}-${messageText.substring(0, 20)}`;
 
   return (
     <div key={messageKey} className="chat-message">
@@ -671,6 +692,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
     prevProps.message.isStreaming === nextProps.message.isStreaming &&
     prevProps.message.citations === nextProps.message.citations &&
     prevProps.message.modelKey === nextProps.message.modelKey &&
+    prevProps.message.messageId === nextProps.message.messageId &&
     prevProps.username === nextProps.username &&
     prevProps.userInitials === nextProps.userInitials &&
     prevProps.userEmail === nextProps.userEmail &&
@@ -700,7 +722,7 @@ const ChatUI = React.forwardRef(({
   const [localMessages, setLocalMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chatSessionId, setChatSessionId] = useState(() => 
+  const [chatSessionId, setChatSessionId] = useState(() =>
     Array(4).fill(0).map(() => Math.random().toString(36).substring(2)).join('')
   );
   const [ragSessionId, setRagSessionId] = useState('');
@@ -795,14 +817,14 @@ const ChatUI = React.forwardRef(({
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
     };
-    
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
     if (!ragEnabled && chatType === 'RAG') {
-      
+
     }
   }, [ragEnabled, chatType, setChatType]);
 
@@ -810,13 +832,13 @@ const ChatUI = React.forwardRef(({
     if (config.debug) console.log('Model ID:', sanitizeForLog(modelId));
     const model = foundationModels.find(model => model.modelId === modelId);
     if (config.debug) console.log('Model:', sanitizeForLog(model));
-    
+
     if (!model) {
       return { found: false, message: "Model not found" };
     }
-    
+
     return model[item];
-  }
+  };
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -826,7 +848,7 @@ const ChatUI = React.forwardRef(({
           const email = attributes.email;
           setUserEmail(email);
           setUserInitials(email.charAt(0).toUpperCase());
-          
+
           if (credentials) {
             await PersonaService.initializeDefaultPersonas(email, credentials);
             const userPersonas = await PersonaService.getUserPersonas(email, credentials);
@@ -913,23 +935,25 @@ const ChatUI = React.forwardRef(({
         console.log('Converting Chat History:', conversationHistory);
       }
       const formattedMessages = [];
-      
+
       const sessionMessages = conversationHistory.filter(msg => msg.sessionID === chatSessionId).reverse();
-      
+
       sessionMessages.forEach(msg => {
         formattedMessages.push({
           role: 'user',
           content: [{ text: msg.question }],
           timestamp: msg.timestamp,
-          documentContext: msg.documentContext
+          documentContext: msg.documentContext,
+          messageId: generateMessageId('history-user')
         });
-        
+
         if (msg.response) {
           formattedMessages.push({
             role: 'assistant',
             content: [{ text: msg.response }],
             timestamp: msg.timestamp + 1,
             modelKey: msg.kbModelKey || null,
+            messageId: generateMessageId('history-assistant'),
             ...(msg.citations && (() => {
               try { const c = JSON.parse(msg.citations); return c.length > 0 ? { citations: c } : {}; }
               catch { return {}; }
@@ -937,7 +961,7 @@ const ChatUI = React.forwardRef(({
           });
         }
       });
-      
+
       setCurrentSessionMessages(formattedMessages);
     }
   }, [conversationHistory, chatSessionId]);
@@ -955,7 +979,7 @@ const ChatUI = React.forwardRef(({
 
       const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp);
       const pairedMessages = [];
-      
+
       for (let i = 0; i < sortedMessages.length; i += 2) {
         if (i + 1 < sortedMessages.length) {
           pairedMessages.push(sortedMessages[i]);
@@ -984,7 +1008,7 @@ const ChatUI = React.forwardRef(({
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
-  
+
     if (config.debug) {
       console.log('Current session messages before new message:', currentSessionMessages);
     }
@@ -993,13 +1017,15 @@ const ChatUI = React.forwardRef(({
     const enhancedInput = input;
     const personaFiles = [];
     const allFiles = [...files, ...personaFiles];
-  
+    const assistantMessageId = generateMessageId('assistant');
+
     const userMessage = {
       role: 'user',
       content: [{ text: input }],
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      messageId: generateMessageId('user')
     };
-  
+
     if (config.debug) {
       console.log('New user message:', userMessage);
       console.log('Enhanced input with persona:', enhancedInput);
@@ -1007,56 +1033,57 @@ const ChatUI = React.forwardRef(({
       console.log('Persona files created:', personaFiles.length);
       console.log('All files (uploaded + persona):', allFiles.length);
     }
-  
+
     setCurrentSessionMessages(prevMessages => [...prevMessages, userMessage]);
     setInput('');
     setIsLoading(true);
-  
+
     try {
       if (config.debug) {
         console.log('Current session messages before formatting:', currentSessionMessages);
       }
-  
+
       const formattedHistory = currentSessionMessages.map(msg => ({
         role: msg.role,
         content: [{ text: msg.content[0].text }]
       }));
-  
+
       if (config.debug) {
         console.log('Formatted Chat History for Bedrock:', JSON.stringify(formattedHistory, null, 2));
         console.log('Supports streaming: ', getModelItem(foundationModels, modelId, 'responseStreamingSupported'));
       }
-  
+
       let streamedResponse = '';
       let result;
       let citations = [];
       let usageData = null;
-  
+
       const handleStreamChunk = (chunk) => {
         setIsLoading(false);
         streamedResponse += chunk;
-        setCurrentSessionMessages(prevMessages => {
-          const lastMessage = prevMessages[prevMessages.length - 1];
-          if (lastMessage && lastMessage.role === 'assistant') {
-            return prevMessages.map((msg, index) => 
-              index === prevMessages.length - 1
-                ? { ...msg, content: [{ text: streamedResponse }] }
-                : msg
-            );
-          } else {
-            return [...prevMessages, {
+
+        setCurrentSessionMessages(prevMessages =>
+          upsertMessageById(
+            prevMessages,
+            assistantMessageId,
+            existing => ({
+              ...existing,
+              content: [{ text: streamedResponse }]
+            }),
+            () => ({
               role: 'assistant',
               content: [{ text: streamedResponse }],
-              timestamp: Date.now()
-            }];
-          }
-        });
+              timestamp: Date.now(),
+              messageId: assistantMessageId
+            })
+          )
+        );
       };
-  
+
       if (chatType === 'RAG') {
-        const supportsStreaming = (modelId === bedrockConfig.defaultModelId && bedrockConfig.defaultModelStream) || 
+        const supportsStreaming = (modelId === bedrockConfig.defaultModelId && bedrockConfig.defaultModelStream) ||
                                 getModelItem(foundationModels, modelId, 'responseStreamingSupported');
-        
+
         if (supportsStreaming) {
           console.log('RAG function received KB model:', selectedKbModel);
           console.log('RAG filters:', {
@@ -1080,11 +1107,11 @@ const ChatUI = React.forwardRef(({
               deponentName: selectedDocType?.value === 'deposition' ? (selectedSubType?.value || null) : null
             }
           );
-  
+
           if (config.debug) {
             console.log('Final streamed response:', result);
           }
-          
+
           if (result.fullResponse && result.fullResponse.metrics) {
             usageData = {
               inputTokens: result.fullResponse.metrics.inputTokenCount || 0,
@@ -1105,7 +1132,7 @@ const ChatUI = React.forwardRef(({
             }
           );
         }
-  
+
         setRagSessionId(result.sessionId);
         citations = result.citations || [];
 
@@ -1120,33 +1147,26 @@ const ChatUI = React.forwardRef(({
           }
         }
 
-        setCurrentSessionMessages(prevMessages => {
-          const resolvedModelKey = result.modelKey || selectedKbModel;
-          const lastMessage = prevMessages[prevMessages.length - 1];
-
-          if (lastMessage && lastMessage.role === 'assistant') {
-            return prevMessages.map((msg, index) =>
-              index === prevMessages.length - 1
-                ? {
-                    ...msg,
-                    modelKey: resolvedModelKey,
-                    ...(citations.length > 0 ? { citations } : {})
-                  }
-                : msg
-            );
-          }
-
-          return [
-            ...prevMessages,
-            {
+        setCurrentSessionMessages(prevMessages =>
+          upsertMessageById(
+            prevMessages,
+            assistantMessageId,
+            existing => ({
+              ...existing,
+              content: [{ text: streamedResponse || result.body || result.completion || existing.content?.[0]?.text || '' }],
+              modelKey: result.modelKey || selectedKbModel,
+              ...(citations.length > 0 ? { citations } : {})
+            }),
+            () => ({
               role: 'assistant',
               content: [{ text: streamedResponse || result.body || result.completion || '' }],
               timestamp: Date.now(),
-              modelKey: resolvedModelKey,
+              messageId: assistantMessageId,
+              modelKey: result.modelKey || selectedKbModel,
               ...(citations.length > 0 ? { citations } : {})
-            }
-          ];
-        });
+            })
+          )
+        );
 
         if (citations.length > 0) {
           if (config.debug) {
@@ -1157,7 +1177,7 @@ const ChatUI = React.forwardRef(({
             console.log('âš ï¸ No citations to attach - citations array is empty, modelKey still attached');
           }
         }
-  
+
       } else if (chatType === 'LLM') {
         const response = await invokeBedrockConverseStreamCommand(
           enhancedInput,
@@ -1167,11 +1187,11 @@ const ChatUI = React.forwardRef(({
           formattedHistory,
           handleStreamChunk
         );
-  
+
         if (config.debug) {
           console.log('Final streamed response:', streamedResponse);
         }
-        
+
         if (response && response.usage) {
           usageData = {
             inputTokens: response.usage.inputTokens || 0,
@@ -1179,16 +1199,16 @@ const ChatUI = React.forwardRef(({
           };
         }
       } else if (chatType === 'Agentic') {
-        const currentDate = new Date().toLocaleDateString('en-US', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+        const currentDate = new Date().toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
         });
         const agenticInput = `Current date: ${currentDate}\n\n${enhancedInput}`;
         result = await invokeBedrockAgent(agenticInput, chatSessionId, credentials, handleStreamChunk);
       }
-  
+
       try {
         let inputTokens, outputTokens;
 
@@ -1225,20 +1245,16 @@ const ChatUI = React.forwardRef(({
           timestamp: savedTimestamp
         };
 
-        console.log('SAVING HISTORY', dynPayload); await convHistory.saveConversation(dynPayload);
+        console.log('SAVING HISTORY', dynPayload);
+        await convHistory.saveConversation(dynPayload);
 
-        setCurrentSessionMessages(prevMessages => {
-          return prevMessages.map((msg, index) => {
-            if (index === prevMessages.length - 1 && msg.role === 'assistant') {
-              return { 
-                ...msg, 
-                timestamp: savedTimestamp,
-                ...(chatType === 'RAG' ? { modelKey: result?.modelKey || selectedKbModel } : {})
-              };
-            }
-            return msg;
-          });
-        });
+        setCurrentSessionMessages(prevMessages =>
+          updateMessageById(prevMessages, assistantMessageId, msg => ({
+            ...msg,
+            timestamp: savedTimestamp,
+            ...(chatType === 'RAG' ? { modelKey: result?.modelKey || msg.modelKey || selectedKbModel } : {})
+          }))
+        );
 
         const historyResponse = await convHistory.loadUserHistory('local-user');
         setConversationHistory(historyResponse);
@@ -1257,7 +1273,8 @@ const ChatUI = React.forwardRef(({
         {
           role: 'assistant',
           content: [{ text: `Sorry, an error occurred: ${sanitizeForLog(error.message)}` }],
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          messageId: generateMessageId('assistant-error')
         }
       ]);
     } finally {
@@ -1284,7 +1301,7 @@ const ChatUI = React.forwardRef(({
       </Box>
     </ChatBubble>
   );
-  
+
   const areFilesDragging = useFilesDragging().areFilesDragging;
 
   const secondaryActions = useMemo(() => (
@@ -1330,7 +1347,7 @@ const ChatUI = React.forwardRef(({
       />
     </Box>
   ), [files]);
-  
+
   const secondaryContent = useMemo(() => (
     areFilesDragging ? (
       <FileDropzone
@@ -1366,11 +1383,11 @@ const ChatUI = React.forwardRef(({
       )
     )
   ), [areFilesDragging, files]);
-  
+
   return (
-    <div style={{ 
-      height: '100%', 
-      display: 'flex', 
+    <div style={{
+      height: '100%',
+      display: 'flex',
       flexDirection: 'column',
       minHeight: 0,
       overflow: 'hidden',
@@ -1382,8 +1399,8 @@ const ChatUI = React.forwardRef(({
             <div>
               <Header
                 variant="h1"
-                description={chatType === 'RAG' 
-                  ? 'Ask me questions about Roundup trial transcrips, depositions, hearings or pleadings.' 
+                description={chatType === 'RAG'
+                  ? 'Ask me questions about Roundup trial transcrips, depositions, hearings or pleadings.'
                   : chatType === 'Agentic'
                   ? 'Ask me anything and I also have the ability to send emails and search the web.'
                   : 'Ask me anything.'}
@@ -1396,7 +1413,7 @@ const ChatUI = React.forwardRef(({
                           triggerType="custom"
                           content={
                             <div style={{ minWidth: '250px' }}>
-                              
+
                             </div>
                           }
                         >
@@ -1525,7 +1542,7 @@ const ChatUI = React.forwardRef(({
                   <div className="chat-messages-wrapper">
                     {currentSessionMessages.map((message, index) => (
                       <ChatMessage
-                        key={`${index}-${message.timestamp}`}
+                        key={message.messageId || `${index}-${message.timestamp}`}
                         message={message}
                         username={username}
                         userInitials={userInitials}
@@ -1592,7 +1609,7 @@ const ChatUI = React.forwardRef(({
     </div>
   );
 });
-  
+
 ChatUI.displayName = 'ChatUI';
 
 export default ChatUI;
