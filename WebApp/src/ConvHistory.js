@@ -30,6 +30,7 @@ export const convHistory = {
       modelId: record.modelId || 'kb-api',
       chatType: record.chatType || 'RAG',
       citations: record.citations || [],
+      kbModelKey: record.kbModelKey || null,
       personaId: record.personaId || null,
       documentContext: record.documentContext || null,
       feedback: record.feedback || null

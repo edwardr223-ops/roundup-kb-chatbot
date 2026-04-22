@@ -675,6 +675,7 @@ const ChatMessage = React.memo(({ message, username, userInitials, userEmail, cr
               color="text-status-inactive"
               margin={{ top: 's' }}
             >
+            <div style={{ height: '12px' }} />  {/* extra spacing */}
               Model: {displayedModelLabel}
             </Box>
           )}
@@ -1256,8 +1257,8 @@ const ChatUI = React.forwardRef(({
           }))
         );
 
-        const historyResponse = await convHistory.loadUserHistory('local-user');
-        setConversationHistory(historyResponse);
+        // const historyResponse = await convHistory.loadUserHistory('local-user');
+        // setConversationHistory(historyResponse);
       } catch (error) {
         if (config.debug) {
           console.error('History Save Error:', error);
